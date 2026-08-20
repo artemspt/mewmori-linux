@@ -47,6 +47,24 @@ def has_active_window() -> bool:
     return _run("xdotool", "getactivewindow")
 
 
+def active_window() -> tuple[str, str]:
+    """(класс, заголовок) окна, которое сейчас перед хозяином.
+
+    "PyCharm is running" and "PyCharm is what you are looking at" are very
+    different facts, and the cat was using the first as if it were the second —
+    commenting on code at someone who was playing Minecraft.
+    """
+    try:
+        out = subprocess.run(
+            ["xdotool", "getactivewindow", "getwindowclassname", "getwindowname"],
+            capture_output=True, text=True, timeout=2,
+            stdin=subprocess.DEVNULL).stdout.splitlines()
+    except (OSError, subprocess.SubprocessError):
+        return "", ""
+    return (out[0].strip() if out else "",
+            out[1].strip() if len(out) > 1 else "")
+
+
 # -- media -------------------------------------------------------------------
 def _player_args() -> list:
     """Browsers register MPRIS players too, and playerctl picks whichever it

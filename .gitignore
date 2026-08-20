@@ -1,0 +1,25 @@
+# Virtualenv for the optional half (voice + telegram) — hundreds of megabytes,
+# and rebuilt from requirements.txt in one command. See run.sh.
+.venv/
+venv/
+
+__pycache__/
+*.py[cod]
+
+# Whisper weights, if anyone drops them in the tree
+models/
+*.bin
+
+# The cat's own data lives in ~/.config/mewmori and ~/.local/share/mewmori and
+# never here — but a stray copy must not be published by accident. That folder
+# holds the Telegram session, which is full access to an account.
+*.session
+*.session-journal
+hosts.json
+telegram.json
+settings.json
+
+.idea/
+.vscode/
+*.swp
+.DS_Store

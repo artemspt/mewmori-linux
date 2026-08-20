@@ -27,7 +27,7 @@ from . import bed as bed_mod  # noqa: E402
 from . import claude as claude_mod  # noqa: E402
 from . import ears as ears_mod  # noqa: E402
 from . import keys  # noqa: E402
-from . import apps, chat, config, health, knowledge, memory, music  # noqa: E402
+from . import apps, chat, commands, config, health, knowledge, memory, music  # noqa: E402
 from . import notify, prefs, project, render, tabs, telegram, voice  # noqa: E402
 from .rig import Animator, Library, Skin  # noqa: E402
 
@@ -63,6 +63,14 @@ FLOW_IDLE = 20.0        # s of not typing that counts as a natural pause
 SPONTANEOUS_GAP = 75.0
 TYPE_CPS = 32           # characters a second the cat appears to type
 PROMPT_TIMEOUT = 180.0  # s before an unanswered question lets the keyboard go
+# While a game is in front, the cat watches the screen half again as often —
+# that is the moment there is most to see and least to read.
+PLAY_GLANCE = 1.5
+# ...and a game keeps the processor busy by definition, so the ordinary
+# "the machine is working, keep quiet" ceiling would silence it for the whole
+# session. A build still shuts the cat up; a game does not.
+PLAY_CEILING = 92.0
+FRONT_POLL = 4.0        # s between checks of which window is in front
 
 
 def _cpu_sample():
@@ -184,6 +192,8 @@ class Cat(Gtk.Window):
         self.notes = notify.Listener(start=bool(config.get("watch_notifications")))
         self.break_now = False      # something just ended: a fair moment to interrupt
         self.gap = float(config.get("chatter_gap"))
+        self.front = None           # the catalogued program in front, if any
+        self.front_in = 0.0
         self.tg = None              # Telegram client, built on the first errand
         self.listening = False      # the microphone is open, waiting for да/нет
         self.type_timer = None      # the typewriter effect in the balloon
@@ -261,7 +271,11 @@ class Cat(Gtk.Window):
 
     # -- behaviour -----------------------------------------------------
     def _plan(self):
-        if (self.project and not self.in_bed
+        # Only when the IDE is the window in front. It used to be enough that
+        # the IDE was *running*, which meant the cat discussed code at someone
+        # halfway through a Minecraft session.
+        at_the_ide = bool(self.front and self.front.key in ("pycharm", "clion"))
+        if (self.project and at_the_ide and not self.in_bed
                 and self.rng.random() < 0.22 and self._cool("code", CODE_COOLDOWN)):
             self._remark_on_code()
             return
@@ -338,6 +352,11 @@ class Cat(Gtk.Window):
             self.ide_scan_in = IDE_POLL
             self._check_apps(now)
             self._check_ide()
+
+        self.front_in -= dt
+        if self.front_in <= 0:
+            self.front_in = FRONT_POLL
+            self.front = apps.by_window(*commands.active_window())
 
         self.claude_in -= dt
         if self.claude_in <= 0:
@@ -917,12 +936,14 @@ class Cat(Gtk.Window):
             return
         if self.target is not None or self.anim.state == "sleep":
             return                              # busy walking, or asleep
-        if now - self.screen_at < SCREEN_MIN or now < self.screen_due:
+        # half again as often while playing: most to look at, least to read
+        pace = PLAY_GLANCE if self.playing() else 1.0
+        if now - self.screen_at < SCREEN_MIN / pace or now < self.screen_due:
             return
         if self.machine_busy():
             return
         self.screen_at = now
-        self.screen_due = now + self.rng.uniform(*SCREEN_IDLE)
+        self.screen_due = now + self.rng.uniform(*SCREEN_IDLE) / pace
         self._observe_screen()
 
     def _observe_screen(self):
@@ -1176,13 +1197,23 @@ class Cat(Gtk.Window):
                 else "день" if hour < 18 else "вечер")
         return f"Тебя потыкали пальцем. Сейчас {when}. Скажи что-нибудь."
 
+    def playing(self) -> bool:
+        """Is a game the thing in front of the owner right now?
+
+        Not "is a game running" — the launcher sits in the background for
+        hours. What matters is what they are actually looking at.
+        """
+        return bool(self.front and self.front.game)
+
     def machine_busy(self) -> bool:
         """Is the machine already working hard enough without the cat's help?
 
         Measured while the cat is not inferring, so this is the load from
-        everything else — a build, a test run, a game.
+        everything else — a build, a test run, a game. A game is the exception:
+        it pins the processor for as long as it is open, and the old ceiling
+        turned that into an evening of silence.
         """
-        return self.cpu_busy > CPU_CEILING
+        return self.cpu_busy > (PLAY_CEILING if self.playing() else CPU_CEILING)
 
     def ask(self, prompt, spontaneous=True, from_owner=False):
         """smart=True routes to the better quantisation — used for code.

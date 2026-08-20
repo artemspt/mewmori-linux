@@ -24,6 +24,7 @@ class App:
     wm_class: str = ""
     launch: tuple = ()
     said: tuple = ()          # how the owner calls it out loud
+    game: bool = False        # while this is in front, the owner is playing
 
 
 CATALOGUE = (
@@ -44,15 +45,16 @@ CATALOGUE = (
         launch=("/opt/clion/bin/clion.sh",),
         said=("клион", "clion", "клеон")),
     App("hydra", "Hydra", "игровой лаунчер: хозяин собрался играть",
-        ("/hydra",), said=("гидру", "hydra")),
-    App("prism", "PrismLauncher", "лаунчер Minecraft: хозяин идёт в майнкрафт",
-        ("prismlauncher",), said=("майнкрафт", "призму")),
+        ("/hydra",), said=("гидру", "hydra"), game=True),
+    App("prism", "Minecraft", "майнкрафт через PrismLauncher",
+        ("prismlauncher",), wm_class="Minecraft",
+        said=("майнкрафт", "minecraft", "призму"), game=True),
     App("spotify", "Spotify", "музыка",
         ("/spotify",), wm_class="spotify", launch=("spotify",),
         said=("спотифай", "spotify")),
     App("steam", "Steam", "игровая платформа: хозяин собрался играть",
         ("/steam", "steamwebhelper"), wm_class="steam", launch=("steam",),
-        said=("стим", "steam")),
+        said=("стим", "steam"), game=True),
     # these are never watched for, only opened — no patterns, so `running()`
     # ignores them entirely
     App("browser", "Firefox", "браузер", (), wm_class="firefox",
@@ -120,3 +122,20 @@ def describe(keys) -> str:
 
 def names(keys) -> str:
     return ", ".join(BY_KEY[k].name for k in sorted(keys) if k in BY_KEY)
+
+
+def by_window(wm_class: str, title: str = ""):
+    """The catalogued program a foreground window belongs to, or None.
+
+    Games are the reason this exists: Minecraft's window class depends on the
+    launcher, so the title is checked too rather than trusting the class alone.
+    """
+    cls, name = (wm_class or "").lower(), (title or "").lower()
+    if not cls and not name:
+        return None
+    for app in CATALOGUE:
+        if app.wm_class and app.wm_class.lower() in cls:
+            return app
+        if app.game and any(alias in name for alias in app.said):
+            return app
+    return None
