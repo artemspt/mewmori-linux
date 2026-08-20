@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Flower crown",
+    "ru" : "Венок"
+  },
+  "id" : "flower_crown",
+  "offset" : [
+    0,
+    -2.6200000000000001
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "rare",
+  "role" : {
+    "en" : "Summer cat",
+    "ru" : "Летний кот"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

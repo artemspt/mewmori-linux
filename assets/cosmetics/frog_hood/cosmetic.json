@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Frog hood",
+    "ru" : "Капюшон лягушки"
+  },
+  "id" : "frog_hood",
+  "offset" : [
+    0,
+    -17.190000000000001
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "epic",
+  "role" : {
+    "en" : "Croaks on Thursdays",
+    "ru" : "Квакает по четвергам"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

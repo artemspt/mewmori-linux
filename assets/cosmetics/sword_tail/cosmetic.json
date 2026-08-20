@@ -1,0 +1,25 @@
+{
+  "displayName" : {
+    "en" : "Sword tail",
+    "ru" : "Хвост-меч"
+  },
+  "id" : "sword_tail",
+  "legacyItemName" : "Хвост-меч",
+  "offset" : [
+    0,
+    0
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "rare",
+  "role" : {
+    "en" : "Sharp-tongued",
+    "ru" : "Острый на язык"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+    "ninja"
+  ],
+  "slot" : "tail",
+  "texture" : "texture.png",
+  "z" : 1
+}

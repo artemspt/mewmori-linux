@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "id": "react_alert",
+  "duration": 0.8,
+  "loop": false,
+  "effect": "curious",
+  "tracks": [
+    {
+      "part": "head",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.2,
+          -5
+        ],
+        [
+          0.55,
+          -3
+        ],
+        [
+          0.8,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    },
+    {
+      "part": "head",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.2,
+          1.6
+        ],
+        [
+          0.8,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    },
+    {
+      "part": "tail",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.25,
+          -20
+        ],
+        [
+          0.6,
+          -14
+        ],
+        [
+          0.8,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    },
+    {
+      "part": "pupil.left",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.2,
+          0.4
+        ],
+        [
+          0.8,
+          0
+        ]
+      ]
+    },
+    {
+      "part": "pupil.right",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.2,
+          0.4
+        ],
+        [
+          0.8,
+          0
+        ]
+      ]
+    }
+  ]
+}

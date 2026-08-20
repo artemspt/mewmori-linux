@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "id": "break_yawn",
+  "duration": 1.8,
+  "loop": false,
+  "tracks": [
+    {
+      "part": "head",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.5,
+          -8
+        ],
+        [
+          1.1,
+          -8
+        ],
+        [
+          1.8,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "head",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.5,
+          2
+        ],
+        [
+          1.1,
+          2
+        ],
+        [
+          1.8,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "eye.left",
+      "property": "alpha",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.4,
+          -1
+        ],
+        [
+          1.2,
+          -1
+        ],
+        [
+          1.6,
+          0
+        ],
+        [
+          1.8,
+          0
+        ]
+      ]
+    },
+    {
+      "part": "eye.right",
+      "property": "alpha",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.4,
+          -1
+        ],
+        [
+          1.2,
+          -1
+        ],
+        [
+          1.6,
+          0
+        ],
+        [
+          1.8,
+          0
+        ]
+      ]
+    },
+    {
+      "part": "head",
+      "frames": [
+        "head.png",
+        "head_yawn.png",
+        "head_yawn.png",
+        "head_yawn.png",
+        "head.png"
+      ],
+      "fps": 2.7777777777777777
+    }
+  ]
+}

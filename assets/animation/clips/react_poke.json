@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "id": "react_poke",
+  "duration": 0.45,
+  "loop": false,
+  "sound": "purr",
+  "effect": "sparkle_pop",
+  "tracks": [
+    {
+      "part": "body",
+      "property": "scaleY",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.09,
+          -0.09
+        ],
+        [
+          0.22,
+          0.04
+        ],
+        [
+          0.45,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    },
+    {
+      "part": "body",
+      "property": "scaleX",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.09,
+          0.08
+        ],
+        [
+          0.22,
+          -0.03
+        ],
+        [
+          0.45,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    },
+    {
+      "part": "head",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.09,
+          -2
+        ],
+        [
+          0.22,
+          1
+        ],
+        [
+          0.45,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    },
+    {
+      "part": "pupil.left",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.09,
+          0.5
+        ],
+        [
+          0.45,
+          0
+        ]
+      ]
+    },
+    {
+      "part": "pupil.right",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.09,
+          0.5
+        ],
+        [
+          0.45,
+          0
+        ]
+      ]
+    }
+  ]
+}

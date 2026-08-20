@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "territorial",
+  "duration": 0.7,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "x",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.22,
+          9
+        ],
+        [
+          0.5,
+          -4.5
+        ],
+        [
+          0.7,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "head",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.22,
+          18
+        ],
+        [
+          0.5,
+          -12.9
+        ],
+        [
+          0.7,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    }
+  ],
+  "blendIn": 0.1
+}

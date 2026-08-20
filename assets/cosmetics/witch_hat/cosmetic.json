@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Witch hat",
+    "ru" : "Шляпа ведьмы"
+  },
+  "id" : "witch_hat",
+  "offset" : [
+    0,
+    0.71999999999999997
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "epic",
+  "role" : {
+    "en" : "Midnight cat",
+    "ru" : "Полночный кот"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+    "witch"
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

@@ -1,0 +1,25 @@
+{
+  "displayName" : {
+    "en" : "Traveller backpack",
+    "ru" : "Рюкзак путешественника"
+  },
+  "id" : "traveller_backpack",
+  "legacyItemName" : "Рюкзак путешественника",
+  "offset" : [
+    13,
+    3
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "rare",
+  "role" : {
+    "en" : "Ready to go",
+    "ru" : "Готов идти"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "body",
+  "texture" : "texture.png",
+  "z" : 1
+}

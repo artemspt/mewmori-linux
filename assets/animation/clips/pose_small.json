@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "pose_small",
+  "duration": 1.0,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          -0.4
+        ],
+        [
+          1.0,
+          -0.4
+        ]
+      ]
+    }
+  ]
+}

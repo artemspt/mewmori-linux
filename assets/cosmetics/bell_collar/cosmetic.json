@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Bell collar",
+    "ru" : "Ошейник с бубенцом"
+  },
+  "id" : "bell_collar",
+  "offset" : [
+    0,
+    0
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "common",
+  "role" : {
+    "en" : "Heard a mile off",
+    "ru" : "Слышно за версту"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "neck",
+  "texture" : "texture.png",
+  "z" : 1
+}

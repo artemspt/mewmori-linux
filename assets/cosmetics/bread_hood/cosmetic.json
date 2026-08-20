@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Bread hood",
+    "ru" : "Хлебный капюшон"
+  },
+  "id" : "bread_hood",
+  "offset" : [
+    -0.59999999999999998,
+    -17.190000000000001
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "common",
+  "role" : {
+    "en" : "Fresh from the toaster",
+    "ru" : "Свежий прямо из тостера"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

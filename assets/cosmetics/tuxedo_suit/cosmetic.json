@@ -1,0 +1,31 @@
+{
+  "displayName" : {
+    "en" : "Tailcoat",
+    "ru" : "Фрак"
+  },
+  "id" : "tuxedo_suit",
+  "offset" : [
+    0,
+    0
+  ],
+  "offsetOverrides" : {
+    "ginger_fold_cat" : [
+      0,
+      -1.1919999999999999
+    ]
+  },
+  "overlayPart" : "body",
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "epic",
+  "role" : {
+    "en" : "A cat who means business",
+    "ru" : "Кот при делах"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "body",
+  "texture" : "texture.png",
+  "z" : 1
+}

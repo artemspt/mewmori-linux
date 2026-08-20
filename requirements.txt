@@ -1,0 +1,16 @@
+# The cat needs none of this. Everything here is for the voice half — the
+# dictation key, the wake word and the spoken commands — and for Telegram.
+# Without them the cat starts, draws, talks and watches exactly as before; the
+# features that need a package say which one is missing and stay out of the way.
+#
+#   python3 -m venv --system-site-packages .venv
+#   .venv/bin/pip install -r requirements.txt
+#
+# --system-site-packages is not optional: PyGObject and pycairo come from the
+# distribution, and a sealed virtualenv cannot see them, so there is no window.
+
+faster-whisper     # speech recognition, local, on the GPU when there is one
+sounddevice        # microphone capture (PortAudio)
+numpy              # what sounddevice hands back
+pynput             # the global dictation key and the command chord
+telethon           # Telegram as the owner's own account

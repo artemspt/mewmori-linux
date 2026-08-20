@@ -1,0 +1,25 @@
+{
+  "displayName" : {
+    "en" : "Ninja headband",
+    "ru" : "Повязка ниндзя"
+  },
+  "id" : "ninja_headband",
+  "legacyItemName" : "Повязка ниндзя",
+  "offset" : [
+    0,
+    -14.800000000000001
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "common",
+  "role" : {
+    "en" : "Quiet as water",
+    "ru" : "Тише воды"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+    "ninja"
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

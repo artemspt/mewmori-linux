@@ -1,0 +1,25 @@
+{
+  "displayName" : {
+    "en" : "Coder cap",
+    "ru" : "Кепка программиста"
+  },
+  "id" : "coder_cap",
+  "legacyItemName" : "Кепка программиста",
+  "offset" : [
+    0,
+    -0.23999999999999999
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "common",
+  "role" : {
+    "en" : "Night shift",
+    "ru" : "Ночная смена"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

@@ -1,0 +1,25 @@
+{
+  "displayName" : {
+    "en" : "Crown",
+    "ru" : "Корона"
+  },
+  "id" : "crown",
+  "legacyItemName" : "Корона",
+  "offset" : [
+    0,
+    1.6699999999999999
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "legendary",
+  "role" : {
+    "en" : "Master of the desk",
+    "ru" : "Хозяин стола"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+    "royal"
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

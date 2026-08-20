@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "id": "break_ear_flick",
+  "duration": 0.6,
+  "loop": false,
+  "tracks": [
+    {
+      "part": "head",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.12,
+          3
+        ],
+        [
+          0.26,
+          -2
+        ],
+        [
+          0.4,
+          1
+        ],
+        [
+          0.6,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    }
+  ]
+}

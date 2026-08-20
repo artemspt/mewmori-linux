@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "run_start",
+  "duration": 0.22,
+  "loop": false,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "scaleX",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.11,
+          -0.06
+        ],
+        [
+          0.22,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    },
+    {
+      "part": "body",
+      "property": "x",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.11,
+          -3
+        ],
+        [
+          0.22,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    },
+    {
+      "part": "body",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.11,
+          -4
+        ],
+        [
+          0.22,
+          0
+        ]
+      ],
+      "easing": "easeOut"
+    }
+  ]
+}

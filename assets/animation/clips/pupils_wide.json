@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "pupils_wide",
+  "duration": 1.0,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "pupil.left",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          0.6
+        ],
+        [
+          1.0,
+          0.6
+        ]
+      ]
+    },
+    {
+      "part": "pupil.right",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          0.6
+        ],
+        [
+          1.0,
+          0.6
+        ]
+      ]
+    }
+  ]
+}

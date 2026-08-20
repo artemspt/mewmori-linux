@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Party hat",
+    "ru" : "Праздничный колпак"
+  },
+  "id" : "party_hat",
+  "offset" : [
+    0,
+    0.23999999999999999
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "common",
+  "role" : {
+    "en" : "Guest of honour",
+    "ru" : "Виновник торжества"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

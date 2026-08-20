@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Santa hat",
+    "ru" : "Колпак Санты"
+  },
+  "id" : "santa_hat",
+  "offset" : [
+    0,
+    -0.71999999999999997
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "rare",
+  "role" : {
+    "en" : "A gift to himself",
+    "ru" : "Подарок сам себе"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "head",
+  "texture" : "texture.png",
+  "z" : 1
+}

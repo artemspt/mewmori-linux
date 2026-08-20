@@ -1,0 +1,25 @@
+{
+  "displayName" : {
+    "en" : "Rocket tail",
+    "ru" : "Хвост-ракета"
+  },
+  "id" : "rocket_tail",
+  "legacyItemName" : "Хвост-ракета",
+  "offset" : [
+    0,
+    0
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "epic",
+  "role" : {
+    "en" : "Three, two, one",
+    "ru" : "Три, два, один"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "tail",
+  "texture" : "texture.png",
+  "z" : 1
+}

@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "id": "sleep",
+  "duration": 4.0,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          -2
+        ],
+        [
+          4.0,
+          -2
+        ]
+      ]
+    },
+    {
+      "part": "body",
+      "property": "scaleY",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          2.0,
+          0.025
+        ],
+        [
+          4.0,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "head",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          -27.3
+        ],
+        [
+          4.0,
+          -27.3
+        ]
+      ]
+    },
+    {
+      "part": "tail",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          90
+        ],
+        [
+          4.0,
+          90
+        ]
+      ]
+    },
+    {
+      "part": "tail",
+      "property": "x",
+      "keys": [
+        [
+          0,
+          -3.9
+        ],
+        [
+          4.0,
+          -3.9
+        ]
+      ]
+    },
+    {
+      "part": "eye.left",
+      "property": "alpha",
+      "keys": [
+        [
+          0,
+          -1
+        ],
+        [
+          4.0,
+          -1
+        ]
+      ]
+    },
+    {
+      "part": "eye.right",
+      "property": "alpha",
+      "keys": [
+        [
+          0,
+          -1
+        ],
+        [
+          4.0,
+          -1
+        ]
+      ]
+    }
+  ],
+  "blendIn": 0.35
+}

@@ -1,0 +1,107 @@
+{
+  "schemaVersion": 1,
+  "id": "alert",
+  "duration": 2.2,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          -1
+        ],
+        [
+          2.2,
+          -1
+        ]
+      ]
+    },
+    {
+      "part": "body",
+      "property": "scaleY",
+      "keys": [
+        [
+          0,
+          -0.03
+        ],
+        [
+          1.1,
+          -0.01
+        ],
+        [
+          2.2,
+          -0.03
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "head",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          1.5
+        ],
+        [
+          2.2,
+          1.5
+        ]
+      ]
+    },
+    {
+      "part": "tail",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.55,
+          22
+        ],
+        [
+          1.65,
+          -22
+        ],
+        [
+          2.2,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "pupil.left",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          0.6
+        ],
+        [
+          2.2,
+          0.6
+        ]
+      ]
+    },
+    {
+      "part": "pupil.right",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          0.6
+        ],
+        [
+          2.2,
+          0.6
+        ]
+      ]
+    }
+  ],
+  "blendIn": 0.15
+}

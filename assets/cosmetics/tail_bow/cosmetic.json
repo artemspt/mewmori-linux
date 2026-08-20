@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Tail bow",
+    "ru" : "Бант на хвост"
+  },
+  "id" : "tail_bow",
+  "offset" : [
+    0,
+    0
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "common",
+  "role" : {
+    "en" : "Simply cute",
+    "ru" : "Просто мило"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "tail",
+  "texture" : "texture.png",
+  "z" : 1
+}

@@ -1,0 +1,32 @@
+{
+  "displayName" : {
+    "en" : "Hunter vest",
+    "ru" : "Жилет охотника"
+  },
+  "id" : "hunter_vest",
+  "legacyItemName" : "Жилет охотника",
+  "offset" : [
+    0,
+    0
+  ],
+  "offsetOverrides" : {
+    "ginger_fold_cat" : [
+      0,
+      -1.1919999999999999
+    ]
+  },
+  "overlayPart" : "body",
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "rare",
+  "role" : {
+    "en" : "Always alert",
+    "ru" : "Всегда начеку"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "body",
+  "texture" : "texture.png",
+  "z" : 1
+}

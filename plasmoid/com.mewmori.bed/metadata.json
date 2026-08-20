@@ -1,0 +1,20 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "Mewmori Linux port"
+            }
+        ],
+        "Category": "Fun and Games",
+        "Description": "A basket in the panel: drag the desktop cat in to make it sleep, click to wake it",
+        "Description[ru]": "Лежанка в панели: перетащите кота с рабочего стола, чтобы он уснул, кликните — проснётся",
+        "Icon": "preferences-desktop-emoticons",
+        "Id": "com.mewmori.bed",
+        "License": "MIT",
+        "Name": "Mewmori Bed",
+        "Name[ru]": "Лежанка Мяумори",
+        "Version": "1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}

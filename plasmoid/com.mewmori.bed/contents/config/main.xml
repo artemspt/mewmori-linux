@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Plasma keeps applet settings itself: this declares them, and plasmashell
+  generates the `plasmoid.configuration.<name>` properties QML reads. Anything
+  not declared here has no storage and silently reads back as undefined.
+-->
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+                          http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="scale" type="Double">
+      <label>How much of the panel's thickness the basket fills</label>
+      <default>1.0</default>
+    </entry>
+    <entry name="pollInterval" type="Int">
+      <label>Milliseconds between reads of the cat's state file</label>
+      <default>1000</default>
+    </entry>
+    <entry name="launchOnClick" type="Bool">
+      <label>Start the cat when the basket is clicked and no cat is running</label>
+      <default>true</default>
+    </entry>
+    <entry name="catCommand" type="String">
+      <label>What to run to start the cat</label>
+      <default></default>
+    </entry>
+    <entry name="dimWhenAbsent" type="Bool">
+      <label>Fade the basket while no cat process is alive</label>
+      <default>true</default>
+    </entry>
+  </group>
+</kcfg>

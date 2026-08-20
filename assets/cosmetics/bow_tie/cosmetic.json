@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Bow tie",
+    "ru" : "Бабочка"
+  },
+  "id" : "bow_tie",
+  "offset" : [
+    0,
+    0
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "common",
+  "role" : {
+    "en" : "A cat in a suit",
+    "ru" : "Кот при костюме"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "neck",
+  "texture" : "texture.png",
+  "z" : 1
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "tail_idle",
+  "duration": 2.6,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "tail",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.65,
+          7
+        ],
+        [
+          1.95,
+          -7
+        ],
+        [
+          2.6,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    }
+  ]
+}

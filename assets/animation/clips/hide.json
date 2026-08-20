@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "hide",
+  "duration": 1.0,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "alpha",
+      "keys": [
+        [
+          0,
+          -1
+        ],
+        [
+          1.0,
+          -1
+        ]
+      ]
+    }
+  ],
+  "blendIn": 0.3
+}

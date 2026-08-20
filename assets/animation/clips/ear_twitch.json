@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "ear_twitch",
+  "duration": 5.8,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "head",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          4.8,
+          0
+        ],
+        [
+          4.9,
+          1.6
+        ],
+        [
+          5.0,
+          -1.2
+        ],
+        [
+          5.12,
+          0
+        ],
+        [
+          5.8,
+          0
+        ]
+      ]
+    }
+  ]
+}

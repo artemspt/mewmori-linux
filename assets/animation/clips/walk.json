@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 1,
+  "id": "walk",
+  "duration": 0.84,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.21,
+          1.5
+        ],
+        [
+          0.42,
+          0
+        ],
+        [
+          0.63,
+          1.5
+        ],
+        [
+          0.84,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "body",
+      "property": "scaleY",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.21,
+          0.018
+        ],
+        [
+          0.42,
+          -0.009
+        ],
+        [
+          0.63,
+          0.018
+        ],
+        [
+          0.84,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "body",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.28,
+          1.3
+        ],
+        [
+          0.56,
+          -1.3
+        ],
+        [
+          0.84,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "tail",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.21,
+          12.6
+        ],
+        [
+          0.63,
+          -12.6
+        ],
+        [
+          0.84,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "head",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.28,
+          -1.4
+        ],
+        [
+          0.56,
+          1.4
+        ],
+        [
+          0.84,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "head",
+      "property": "y",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.21,
+          -0.6
+        ],
+        [
+          0.42,
+          0
+        ],
+        [
+          0.63,
+          -0.6
+        ],
+        [
+          0.84,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    }
+  ],
+  "blendIn": 0.15
+}

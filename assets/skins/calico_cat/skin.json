@@ -1,0 +1,134 @@
+{
+  "displayName" : {
+    "en" : "Calico",
+    "ru" : "Калико"
+  },
+  "id" : "calico_cat",
+  "rarity" : "rare",
+  "rig" : {
+    "attachments" : {
+      "body" : {
+        "offset" : [
+          0,
+          0
+        ],
+        "part" : "body"
+      },
+      "head" : {
+        "offset" : [
+          0,
+          16
+        ],
+        "part" : "head"
+      },
+      "neck" : {
+        "offset" : [
+          0,
+          -28
+        ],
+        "part" : "head"
+      },
+      "tail" : {
+        "offset" : [
+          -2.3799999999999999,
+          47.68
+        ],
+        "part" : "tail"
+      }
+    },
+    "eyelids" : [
+      "eye.left",
+      "eye.right"
+    ],
+    "gaze" : {
+      "divergence" : 3,
+      "maxOffset" : 3,
+      "pupils" : [
+        "pupil.left",
+        "pupil.right"
+      ]
+    },
+    "parts" : [
+      {
+        "anchor" : [
+          0.5,
+          0.44444444444444442
+        ],
+        "id" : "body",
+        "position" : [
+          -5,
+          -22
+        ],
+        "texture" : "body.png",
+        "z" : 0
+      },
+      {
+        "anchor" : [
+          0.5,
+          0.01
+        ],
+        "id" : "tail",
+        "parent" : "body",
+        "position" : [
+          31.25,
+          -11.720000000000001
+        ],
+        "texture" : "tail.png",
+        "z" : 1
+      },
+      {
+        "anchor" : [
+          0.5,
+          0.5
+        ],
+        "id" : "head",
+        "parent" : "body",
+        "position" : [
+          -9.7699999999999996,
+          40.039999999999999
+        ],
+        "texture" : "head.png",
+        "z" : 2
+      },
+      {
+        "id" : "eye.left",
+        "parent" : "head",
+        "position" : [
+          -10.74,
+          -6.8399999999999999
+        ],
+        "texture" : "eye.png",
+        "z" : 3
+      },
+      {
+        "id" : "eye.right",
+        "parent" : "head",
+        "position" : [
+          5.8600000000000003,
+          -6.8399999999999999
+        ],
+        "texture" : "eye.png",
+        "z" : 3
+      },
+      {
+        "id" : "pupil.left",
+        "parent" : "eye.left",
+        "texture" : "pupil.png",
+        "z" : 4
+      },
+      {
+        "id" : "pupil.right",
+        "parent" : "eye.right",
+        "texture" : "pupil.png",
+        "z" : 4
+      }
+    ],
+    "pixelsPerUnit" : 10.486000000000001,
+    "referenceHeight" : 100
+  },
+  "role" : {
+    "en" : "Three colours, one character",
+    "ru" : "Три цвета, один характер"
+  },
+  "schemaVersion" : 1
+}

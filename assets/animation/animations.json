@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+
+  "states": {
+    "idle": {
+      "base": [
+        { "clip": "idle_sit", "weight": 6 },
+        { "clip": "idle_sit_alt", "weight": 3 },
+        { "clip": "idle_curious", "weight": 1 }
+      ],
+      "overlays": ["breathe", "blink", "tail_idle", "ear_twitch"],
+      "modifiers": ["gazeWander"],
+      "breaks": {
+        "afterSeconds": [7, 16],
+        "clips": [
+          { "clip": "break_look_around", "weight": 4 },
+          { "clip": "break_groom", "weight": 3 },
+          { "clip": "break_ear_flick", "weight": 3 },
+          { "clip": "break_yawn", "weight": 2 },
+          { "clip": "break_stretch", "weight": 1 }
+        ]
+      }
+    },
+
+    "walk": {
+      "base": [{ "clip": "walk", "weight": 1 }],
+      "overlays": ["breathe", "blink"],
+      "modifiers": ["gazeWander"]
+    },
+
+    "run": {
+      "enter": "run_start",
+      "base": [{ "clip": "run", "weight": 1 }],
+      "exit": "run_stop",
+      "overlays": ["blink"]
+    },
+
+    "alert": {
+      "base": [{ "clip": "alert", "weight": 1 }],
+      "overlays": ["blink"],
+      "modifiers": ["gazeFollowCursor"]
+    },
+
+    "sleep": {
+      "base": [{ "clip": "sleep", "weight": 1 }],
+      "effects": ["sleep_z"]
+    },
+
+    "sleep_small": {
+      "base": [{ "clip": "sleep", "weight": 1 }],
+      "overlays": ["pose_small"],
+      "effects": ["sleep_z"]
+    },
+
+    "eat": {
+      "base": [{ "clip": "eat", "weight": 1 }],
+      "overlays": ["blink"]
+    },
+
+    "interact": {
+      "base": [{ "clip": "idle_sit", "weight": 1 }],
+      "overlays": ["breathe", "blink", "tail_idle"],
+      "modifiers": ["gazeFollowCursor"],
+      "effects": ["hearts"]
+    },
+
+    "watch": {
+      "base": [{ "clip": "idle_sit", "weight": 1 }],
+      "overlays": ["breathe", "blink", "pupils_wide"],
+      "modifiers": ["gazeFollowCursor", "headTrack"]
+    },
+
+    "think": {
+      "base": [{ "clip": "think", "weight": 1 }],
+      "overlays": ["breathe", "blink"]
+    },
+
+    "groom": {
+      "base": [{ "clip": "groom", "weight": 1 }],
+      "overlays": ["blink"]
+    },
+
+    "stretch": {
+      "enter": "break_stretch",
+      "base": [{ "clip": "idle_sit", "weight": 1 }],
+      "overlays": ["breathe", "blink"]
+    },
+
+    "sneeze": {
+      "base": [{ "clip": "idle_sit", "weight": 1 }],
+      "overlays": ["breathe", "blink"],
+      "breaks": {
+        "afterSeconds": [3, 7],
+        "clips": [{ "clip": "break_sneeze", "weight": 1 }]
+      }
+    },
+
+    "territorial": {
+      "base": [{ "clip": "territorial", "weight": 1 }],
+      "overlays": ["blink"]
+    },
+
+    "jump": {
+      "enter": "jump",
+      "base": [{ "clip": "idle_sit", "weight": 1 }],
+      "overlays": ["breathe", "blink"]
+    },
+
+    "drag": {
+      "base": [{ "clip": "drag", "weight": 1 }],
+      "overlays": ["blink"]
+    },
+
+    "hide": {
+      "base": [{ "clip": "hide", "weight": 1 }]
+    },
+
+    "hide_and_seek": {
+      "base": [{ "clip": "hide_and_seek", "weight": 1 }]
+    },
+
+    "change_skin": {
+      "base": [{ "clip": "idle_sit", "weight": 1 }],
+      "overlays": ["breathe", "blink", "pose_small"],
+      "effects": ["magic"]
+    }
+  },
+
+  "moodMap": {
+    "idle":     { "idle": "idle", "walking": "walk", "running": "run" },
+    "walking":  { "idle": "idle", "walking": "walk", "running": "run" },
+    "loading":  { "idle": "idle", "walking": "walk", "running": "run" },
+    "chasing":  { "idle": "alert", "walking": "run", "running": "run" },
+
+    "sleeping": "sleep",
+    "sleepInStatusBar": "sleep_small",
+    "eating": "eat",
+    "interacting": "interact",
+    "watching": "watch",
+    "thinking": "think",
+    "grooming": "groom",
+    "stretching": "stretch",
+    "sneezing": "sneeze",
+    "territorialMarking": "territorial",
+    "jumping": "jump",
+    "drag": "drag",
+    "hiding": "hide",
+    "hideAndSeek": "hide_and_seek",
+    "changingSkin": "change_skin"
+  },
+
+  "reactions": {
+    "poke":       { "clip": "react_poke",    "priority": 3, "cooldown": 0.4 },
+    "cursorFast": { "clip": "react_startle", "priority": 2, "cooldown": 12 },
+    "cursorNear": { "clip": "react_alert",   "priority": 1, "cooldown": 7 }
+  },
+
+  "effects": {
+    "surprise": {
+      "sprite": "star4",
+      "count": [3, 4],
+      "size": [11, 15],
+      "anchor": [0, 20],
+      "radius": [11, 19],
+      "angle": [15, 165],
+      "drift": 7,
+      "lifetime": 0.6,
+      "stagger": 0.05,
+      "colors": ["#FFD64A", "#FFE98A", "#FFF6C4"]
+    },
+
+    "sparkle_pop": {
+      "sprite": "sparkle",
+      "count": [4, 6],
+      "size": [7, 10],
+      "anchor": [0, 6],
+      "radius": [16, 26],
+      "angle": [0, 360],
+      "drift": 5,
+      "lifetime": 0.7,
+      "stagger": 0.04,
+      "colors": ["#FFF2B0", "#FFFFFF", "#FFD64A"]
+    },
+
+    "magic": {
+      "sprite": "star4",
+      "count": [2, 3],
+      "size": [8, 13],
+      "anchor": [0, 4],
+      "radius": [18, 28],
+      "angle": [0, 360],
+      "drift": 6,
+      "lifetime": 0.75,
+      "stagger": 0.06,
+      "spin": 90,
+      "colors": ["#C9A7FF", "#FFE98A", "#FFFFFF"],
+      "interval": [0.3, 0.55]
+    },
+
+    "hearts": {
+      "sprite": "heart",
+      "count": [1, 2],
+      "size": [9, 12],
+      "anchor": [4, 18],
+      "radius": [7, 15],
+      "angle": [45, 135],
+      "drift": 13,
+      "lifetime": 1.1,
+      "stagger": 0.18,
+      "colors": ["#FF8AB0", "#FF5C8A"],
+      "interval": [1.1, 2.0]
+    },
+
+    "curious": {
+      "sprite": "question",
+      "count": 1,
+      "size": [11, 13],
+      "anchor": [8, 22],
+      "radius": [5, 9],
+      "angle": [55, 105],
+      "drift": 7,
+      "lifetime": 0.9,
+      "colors": ["#FFFFFF", "#DCE3F0"]
+    },
+
+    "sleep_z": {
+      "sprite": "sleepZ",
+      "count": 1,
+      "size": [7, 10],
+      "anchor": [12, 14],
+      "radius": [5, 10],
+      "angle": [45, 80],
+      "drift": 16,
+      "lifetime": 1.7,
+      "colors": ["#BFD4FF", "#FFFFFF"],
+      "interval": [1.5, 2.6]
+    },
+
+    "sneeze_drops": {
+      "sprite": "drop",
+      "count": [2, 3],
+      "size": [5, 8],
+      "anchor": [16, 14],
+      "radius": [8, 15],
+      "angle": [-35, 25],
+      "drift": 9,
+      "lifetime": 0.45,
+      "stagger": 0.03,
+      "colors": ["#BFE3FF", "#FFFFFF"]
+    },
+
+    "dust_puff": {
+      "sprite": "dust",
+      "count": [2, 3],
+      "size": [7, 11],
+      "anchor": [0, -34],
+      "radius": [10, 20],
+      "angle": [0, 360],
+      "drift": 5,
+      "lifetime": 0.5,
+      "stagger": 0.04,
+      "colors": ["#E4D8C4", "#FFFFFF"]
+    }
+  }
+}

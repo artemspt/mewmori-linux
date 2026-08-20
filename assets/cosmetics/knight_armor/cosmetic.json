@@ -1,0 +1,32 @@
+{
+  "displayName" : {
+    "en" : "Knight armour",
+    "ru" : "Броня рыцаря"
+  },
+  "id" : "knight_armor",
+  "legacyItemName" : "Броня рыцаря",
+  "offset" : [
+    0,
+    0
+  ],
+  "offsetOverrides" : {
+    "ginger_fold_cat" : [
+      0,
+      -1.1919999999999999
+    ]
+  },
+  "overlayPart" : "body",
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "epic",
+  "role" : {
+    "en" : "For desk and honour",
+    "ru" : "За стол и честь"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+    "royal"
+  ],
+  "slot" : "body",
+  "texture" : "texture.png",
+  "z" : 1
+}

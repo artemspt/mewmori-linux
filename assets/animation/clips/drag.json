@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "id": "drag",
+  "duration": 1.6,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          -30
+        ],
+        [
+          1.6,
+          -30
+        ]
+      ]
+    },
+    {
+      "part": "body",
+      "property": "scaleY",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.8,
+          0.02
+        ],
+        [
+          1.6,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "tail",
+      "property": "rotation",
+      "keys": [
+        [
+          0,
+          0
+        ],
+        [
+          0.4,
+          16
+        ],
+        [
+          1.2,
+          -16
+        ],
+        [
+          1.6,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    }
+  ],
+  "blendIn": 0.2
+}

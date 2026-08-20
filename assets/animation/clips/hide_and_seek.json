@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "hide_and_seek",
+  "duration": 1.0,
+  "loop": true,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          -0.78
+        ],
+        [
+          1.0,
+          -0.78
+        ]
+      ]
+    }
+  ],
+  "blendIn": 0
+}

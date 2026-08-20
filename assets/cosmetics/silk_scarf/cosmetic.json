@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Silk scarf",
+    "ru" : "Шёлковый шарф"
+  },
+  "id" : "silk_scarf",
+  "offset" : [
+    0,
+    0
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "rare",
+  "role" : {
+    "en" : "Always dressed up",
+    "ru" : "Всегда при параде"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "neck",
+  "texture" : "texture.png",
+  "z" : 1
+}

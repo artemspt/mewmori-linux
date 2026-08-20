@@ -1,0 +1,24 @@
+{
+  "displayName" : {
+    "en" : "Angel wings",
+    "ru" : "Крылья"
+  },
+  "id" : "angel_wings",
+  "offset" : [
+    0,
+    5
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "legendary",
+  "role" : {
+    "en" : "Broke nothing, ever",
+    "ru" : "Ничего не разбивал"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "body",
+  "texture" : "texture.png",
+  "z" : -20
+}

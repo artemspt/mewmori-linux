@@ -1,0 +1,31 @@
+{
+  "displayName" : {
+    "en" : "Wizard cloak",
+    "ru" : "Мантия волшебника"
+  },
+  "id" : "wizard_cloak",
+  "offset" : [
+    0,
+    0
+  ],
+  "offsetOverrides" : {
+    "ginger_fold_cat" : [
+      0,
+      -1.1919999999999999
+    ]
+  },
+  "overlayPart" : "body",
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "epic",
+  "role" : {
+    "en" : "Knows a spell or two",
+    "ru" : "Знает пару заклинаний"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+    "witch"
+  ],
+  "slot" : "body",
+  "texture" : "texture.png",
+  "z" : 1
+}

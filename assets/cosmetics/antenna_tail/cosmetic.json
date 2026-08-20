@@ -1,0 +1,25 @@
+{
+  "displayName" : {
+    "en" : "Antenna tail",
+    "ru" : "Хвост-антенна"
+  },
+  "id" : "antenna_tail",
+  "legacyItemName" : "Хвост-антенна",
+  "offset" : [
+    0,
+    0
+  ],
+  "pixelsPerUnit" : 10.486000000000001,
+  "rarity" : "rare",
+  "role" : {
+    "en" : "Catching a signal",
+    "ru" : "Ловит сигнал"
+  },
+  "schemaVersion" : 1,
+  "sets" : [
+
+  ],
+  "slot" : "tail",
+  "texture" : "texture.png",
+  "z" : 1
+}

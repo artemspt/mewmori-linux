@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "id": "classic_cat",
+  "displayName": {
+    "ru": "Классический",
+    "en": "Classic"
+  },
+  "role": {
+    "ru": "Верный помощник",
+    "en": "Loyal sidekick"
+  },
+  "rarity": "common",
+  "rig": {
+    "referenceHeight": 100,
+    "pixelsPerUnit": 10.486,
+    "parts": [
+      {
+        "id": "body",
+        "texture": "body.png",
+        "z": 0,
+        "anchor": [
+          0.5,
+          0.4444444444444444
+        ],
+        "position": [
+          -5,
+          -22
+        ]
+      },
+      {
+        "id": "tail",
+        "texture": "tail.png",
+        "z": 1,
+        "parent": "body",
+        "anchor": [
+          0.5,
+          0.01
+        ],
+        "position": [
+          31.25,
+          -11.72
+        ]
+      },
+      {
+        "id": "head",
+        "texture": "head.png",
+        "z": 2,
+        "parent": "body",
+        "anchor": [
+          0.5,
+          0.5
+        ],
+        "position": [
+          -9.77,
+          40.04
+        ]
+      },
+      {
+        "id": "eye.left",
+        "texture": "eye.png",
+        "z": 3,
+        "parent": "head",
+        "position": [
+          -10.74,
+          -6.84
+        ]
+      },
+      {
+        "id": "eye.right",
+        "texture": "eye.png",
+        "z": 3,
+        "parent": "head",
+        "position": [
+          5.86,
+          -6.84
+        ]
+      },
+      {
+        "id": "pupil.left",
+        "texture": "pupil.png",
+        "z": 4,
+        "parent": "eye.left"
+      },
+      {
+        "id": "pupil.right",
+        "texture": "pupil.png",
+        "z": 4,
+        "parent": "eye.right"
+      }
+    ],
+    "attachments": {
+      "head": {
+        "part": "head",
+        "offset": [
+          0,
+          16
+        ]
+      },
+      "body": {
+        "part": "body",
+        "offset": [
+          0,
+          0
+        ]
+      },
+      "tail": {
+        "part": "tail",
+        "offset": [
+          -2.38,
+          47.68
+        ]
+      },
+      "neck": {
+        "part": "head",
+        "offset": [
+          0,
+          -28
+        ]
+      }
+    },
+    "gaze": {
+      "pupils": [
+        "pupil.left",
+        "pupil.right"
+      ],
+      "maxOffset": 3,
+      "divergence": 3
+    },
+    "eyelids": [
+      "eye.left",
+      "eye.right"
+    ]
+  }
+}
