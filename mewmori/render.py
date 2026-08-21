@@ -58,6 +58,39 @@ def draw(cr, skin, textures, pose, height_px, facing=1):
     cr.restore()
 
 
+def draw_cosmetic(cr, skin, pose, height_px, facing, cosmetic, surf):
+    """Paint one cosmetic texture attached to its slot."""
+    if not cosmetic or surf is None:
+        return
+    slot = cosmetic.get("slot")
+    attach = skin.attachments.get(slot) if isinstance(skin.attachments, dict) else None
+    if not attach:
+        return
+    part_id = attach.get("part") if isinstance(attach, dict) else getattr(attach, "part", None)
+    if not part_id:
+        return
+    mats, alphas = _matrices(skin, pose)
+    if part_id not in mats:
+        return
+    off = attach.get("offset", [0, 0]) if isinstance(attach, dict) else getattr(attach, "offset", [0, 0])
+    coff = cosmetic.get("offset", [0, 0])
+    k = height_px / skin.reference_height
+    cr.save()
+    cr.scale(k * facing, k)
+    cr.transform(mats[part_id])
+    # cosmetic offset + attachment offset, y flipped as in _matrices
+    cr.translate(off[0] + coff[0], -(off[1] + coff[1]))
+    w, h = surf.get_width(), surf.get_height()
+    cr.scale(1.0 / skin.ppu, 1.0 / skin.ppu)
+    # center texture on attachment point
+    cr.translate(-w / 2, -h / 2)
+    cr.set_source_surface(surf, 0, 0)
+    cr.get_source().set_filter(cairo.FILTER_GOOD)
+    # inherit alpha from the parent part so vanish fade also fades the hat
+    cr.paint_with_alpha(alphas.get(part_id, 1.0))
+    cr.restore()
+
+
 def ink_box(surf):
     """Tight box around the non-transparent pixels of a texture, in its own pixels.
 

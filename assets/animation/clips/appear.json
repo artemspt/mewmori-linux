@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "appear",
+  "duration": 0.6,
+  "loop": false,
+  "tracks": [
+    {
+      "part": "body",
+      "property": "alpha",
+      "keys": [
+        [
+          0,
+          -1
+        ],
+        [
+          0.6,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    },
+    {
+      "part": "body",
+      "property": "scale",
+      "keys": [
+        [
+          0,
+          -0.15
+        ],
+        [
+          0.6,
+          0
+        ]
+      ],
+      "easing": "easeInOut"
+    }
+  ],
+  "blendIn": 0.1
+}

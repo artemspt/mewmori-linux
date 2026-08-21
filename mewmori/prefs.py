@@ -154,6 +154,13 @@ class Window(Gtk.Window):
             False, False, 0)
 
         box.pack_start(self._heading("Голос: диктовка и команды"), False, False, 0)
+        self.type_sound = Gtk.Switch(active=bool(config.get("type_sound")))
+        self.type_sound.set_halign(Gtk.Align.END)
+        self.type_sound.connect("notify::active", self._type_sound_toggled)
+        box.pack_start(self._row(
+            "Звук печати", self.type_sound,
+            "Тихий щелчок на каждое слово, пока кот печатает. Выключи, "
+            "если он мешает."), False, False, 0)
         stack_why = ears.available() or keys.available()
         self.voice_on = Gtk.Switch(active=bool(config.get("voice_enabled")))
         self.voice_on.set_halign(Gtk.Align.END)
@@ -263,6 +270,11 @@ class Window(Gtk.Window):
 
     def _remember_changed(self, switch, _param):
         config.save({"remember_session": switch.get_active()})
+
+    def _type_sound_toggled(self, switch, _param):
+        config.save({"type_sound": switch.get_active()})
+        if switch.get_active():
+            self.cat._type_blip()   # instant feedback: hear what you just turned on
 
     def _forget(self, _button):
         from . import memory

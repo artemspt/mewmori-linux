@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import json
 import math
 import os
 import random
@@ -28,10 +29,11 @@ from . import claude as claude_mod  # noqa: E402
 from . import ears as ears_mod  # noqa: E402
 from . import keys  # noqa: E402
 from . import apps, chat, commands, config, health, knowledge, memory, music  # noqa: E402
-from . import notify, prefs, project, render, tabs, telegram, voice  # noqa: E402
+from . import notify, prefs, project, render, sounds, tabs, telegram, voice  # noqa: E402
 from .rig import Animator, Library, Skin  # noqa: E402
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
+COSMETICS_DIR = ASSETS / "cosmetics"
 # one model for everything now; the old MEWMORI_MODEL_FAST still overrides it
 MODEL = os.environ.get("MEWMORI_MODEL") or os.environ.get("MEWMORI_MODEL_FAST", "")
 BUBBLE_H = 170       # room reserved above the cat for the balloon
@@ -71,6 +73,14 @@ PLAY_GLANCE = 1.5
 # session. A build still shuts the cat up; a game does not.
 PLAY_CEILING = 92.0
 FRONT_POLL = 4.0        # s between checks of which window is in front
+# The vanishing act. The hide timer is 700 ms, not the clip's full 800: a
+# non-loop base clip is restarted by the animator the moment it ends, and the
+# restart blends back toward visible — hiding at 700 ms catches the cat while
+# it is still fully faded out. Same reasoning puts idle at 600 ms, exactly at
+# the end of the appear clip, before it would start fading out again.
+VANISH_HIDE_MS = 700    # ms of fade-out before the window is unmapped
+VANISH_SHOW_MS = 600    # ms of fade-in before idle takes over
+VANISH_AWAY = (15, 15)  # s spent away before coming back in a new skin — 15 sec per request
 
 
 def _cpu_sample():
@@ -218,10 +228,29 @@ class Cat(Gtk.Window):
         self.last_ptr = (0, 0)
         self.last_t = time.monotonic()
 
+        # -- the vanishing act --------------------------------------------
+        # once in a while the cat slips away for a couple of minutes and
+        # comes back wearing a different skin. One flag says a trick is in
+        # flight; every timer is kept by id so bed/destroy can cancel them.
+        self._vanish_pending = False      # vanish/hidden/appear in progress
+        self._vanish_next_timer = None    # GLib source: next booked trick
+        self._vanish_hide_timer = None    # GLib source: fade-out -> unmap
+        self._vanish_return_timer = None  # GLib source: away -> come back
+        self._vanish_appear_timer = None  # GLib source: fade-in -> idle
+        self._next_vanish_ts = 0.0        # when the booked trigger fires
+        self._vanish_phase = None         # None | "to_corner" | "vanishing" | "hidden"
+        self._vanish_origin = None        # (x, y) where the trick started — walk back on return
+        self._cosmetic = None             # dict from cosmetic.json or None
+        self._cosmetic_surf = None        # cairo surface for the cosmetic texture
+        self._cosmetic_slot = None
+        self._cosmetic_timer = None       # GLib source for auto-strip in 5 min
+
         self.bed = bed_mod.PanelBed(self.wake_up, self.go_to_bed)
 
         self._setup_window()
         GLib.timeout_add(FRAME_MS, self._tick)
+        if config.get("vanish_enabled"):
+            self._schedule_next_vanish()
 
     # -- setup ---------------------------------------------------------
     def load_skin(self, skin_id):
@@ -271,6 +300,9 @@ class Cat(Gtk.Window):
 
     # -- behaviour -----------------------------------------------------
     def _plan(self):
+        # gone or going: no idle/walk planning until the trick is over
+        if self._vanish_pending:
+            return
         # Only when the IDE is the window in front. It used to be enough that
         # the IDE was *running*, which meant the cat discussed code at someone
         # halfway through a Minecraft session.
@@ -403,8 +435,24 @@ class Cat(Gtk.Window):
                 if gap <= step or gap < 1e-6:
                     self.x, self.y = tx, ty
                     self.target, self.speed = None, 0.0
-                    self.anim.set_state("idle")
-                    self.plan_in = self.rng.uniform(1.0, 3.0)
+                    # vanishing-act runs take precedence over idle
+                    ph = getattr(self, "_vanish_phase", None)
+                    if ph == "to_corner":
+                        self._vanish_at_corner()
+                    elif ph == "returning":
+                        self._vanish_origin = None
+                        self._vanish_pending = False
+                        self._vanish_phase = None
+                        self.anim.set_state("idle")
+                        self.plan_in = self.rng.uniform(1.0, 3.0)
+                        try:
+                            self._say_dressed()
+                        except Exception:
+                            pass
+                        self._schedule_next_vanish()
+                    else:
+                        self.anim.set_state("idle")
+                        self.plan_in = self.rng.uniform(1.0, 3.0)
                 else:
                     self.x += dx / gap * step
                     self.y += dy / gap * step
@@ -419,7 +467,8 @@ class Cat(Gtk.Window):
             head_y = self.y + self.bounds[1] + self.height_px * 0.3
             dist = math.hypot(cx - self.x, cy - head_y)
             moved = math.hypot(cx - self.last_ptr[0], cy - self.last_ptr[1]) / max(dt, 1e-3)
-            if self.anim.state not in ("sleep", "drag") and not self.anim.busy:
+            if (self.anim.state not in ("sleep", "drag")
+                    and not self.anim.busy and not self._vanish_pending):
                 if dist < 260 and moved > 1400 and self._cool("cursorFast", 12):
                     self.anim.react("cursorFast")
                 elif dist < 150 and self._cool("cursorNear", 7):
@@ -504,6 +553,10 @@ class Cat(Gtk.Window):
         talk = Gtk.MenuItem(label="Поговорить…")
         talk.connect("activate", lambda *_: self._prompt_window())
         menu.append(talk)
+        poof = Gtk.MenuItem(label="Исчезнуть")
+        poof.set_sensitive(not self._vanish_pending and not self.in_bed)
+        poof.connect("activate", lambda *_: self._trigger_vanish(manual=True))
+        menu.append(poof)
         eye = Gtk.CheckMenuItem(label="Смотреть на экран")
         eye.set_active(self.watch_screen)
         eye.set_sensitive(bool(self.model_vision))
@@ -612,6 +665,232 @@ class Cat(Gtk.Window):
         self._shape()
         self.anim.react("poke")
 
+    # -- the vanishing act -------------------------------------------------
+    def _schedule_next_vanish(self):
+        """Book the next random disappearing act — strictly 5-7 min as requested."""
+        if self._vanish_next_timer:
+            GLib.source_remove(self._vanish_next_timer)
+        # 5-7 minutes between tricks, jittered per request; config kept for enable/disable
+        secs = int(self.rng.uniform(300, 420))
+        self._next_vanish_ts = time.monotonic() + secs
+        self._vanish_next_timer = GLib.timeout_add_seconds(secs, self._vanish_due)
+        return False
+
+    def _vanish_due(self):
+        """The booked moment arrived — vanish, unless life got in the way."""
+        self._vanish_next_timer = None
+        if (not config.get("vanish_enabled") or self.in_bed
+                or self.prompting or self._vanish_pending):
+            self._schedule_next_vanish()     # try again after another interval
+            return False
+        if not self._trigger_vanish():
+            self._schedule_next_vanish()
+        return False
+
+    def _trigger_vanish(self, manual=False):
+        """Run to the nearest corner, then fade out, change skins unseen, and book the walk back.
+
+        manual=True is the menu item: an explicit request works even when the
+        random event is switched off, but never twice over or from bed.
+        The cat first runs to the closest roam corner (as if slipping away behind
+        the edge), then plays vanish → hidden.
+        """
+        if self._vanish_pending or self.in_bed or self.prompting:
+            return False
+        if not manual and not config.get("vanish_enabled"):
+            return False
+        # nearest roam corner by feet position
+        x0, y0, x1, y1 = self.roam
+        corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
+        cx, cy = min(corners, key=lambda p: math.hypot(p[0] - self.x, p[1] - self.y))
+        self._vanish_origin = (self.x, self.y)
+        self._vanish_pending = True
+        self._vanish_phase = "to_corner"
+        self._vanish_corner = (cx, cy)
+        self.target = (cx, cy)
+        self.speed = RUN_SPEED * self.height_px / 120.0
+        self.plan_in = math.inf              # an absent cat plans nothing while trick is in flight
+        # face the corner before running
+        if abs(cx - self.x) > 1.0:
+            self.facing = -1 if cx > self.x else 1
+        self.anim.set_state("run")
+        return True
+
+    def _vanish_at_corner(self):
+        """Reached the corner — now actually fade out."""
+        if not self._vanish_pending or self._vanish_phase != "to_corner":
+            return False
+        self._vanish_phase = "vanishing"
+        self.target, self.speed = None, 0.0
+        self.anim.set_state("vanish")
+        self._vanish_hide_timer = GLib.timeout_add(VANISH_HIDE_MS, self._vanished)
+        return False
+
+    def _vanished(self):
+        """Fully faded out: unmap the window and pick a random cosmetic."""
+        self._vanish_hide_timer = None
+        self._vanish_phase = "hidden"
+        self.hide()
+        self.anim.set_state("hidden")
+        # equip one random cosmetic from assets/cosmetics while hidden
+        self._equip_random_cosmetic()
+        self._vanish_return_timer = GLib.timeout_add_seconds(
+            self.rng.randint(*VANISH_AWAY), self._return_from_vanish)
+        return False
+
+    def _return_from_vanish(self):
+        """Step back onto the desktop, fading in as somebody new."""
+        self._vanish_return_timer = None
+        if not self._vanish_pending or self.in_bed:
+            self._cancel_vanish()            # cancelled meanwhile (bed, quit)
+            return False
+        self._vanish_phase = "appearing"
+        self.show_all()
+        # appear near the corner where it vanished, but slightly inset so it is fully visible
+        self._shape()
+        self.anim.set_state("appear")
+        self._vanish_appear_timer = GLib.timeout_add(
+            VANISH_SHOW_MS, self._back_from_vanish)
+        return False
+
+    def _back_from_vanish(self):
+        """Appear done — walk back to where the trick started, then resume."""
+        self._vanish_appear_timer = None
+        if self._vanish_origin is not None:
+            ox, oy = self._vanish_origin
+            # clamp origin inside roam in case workarea changed while hidden
+            ox = max(self.roam[0], min(self.roam[2], ox))
+            oy = max(self.roam[1], min(self.roam[3], oy))
+            if math.hypot(ox - self.x, oy - self.y) > 4:
+                self._vanish_phase = "returning"
+                self.target = (ox, oy)
+                self.speed = RUN_SPEED * self.height_px / 120.0
+                if abs(ox - self.x) > 1.0:
+                    self.facing = -1 if ox > self.x else 1
+                self.anim.set_state("run")
+                return False
+        # already at origin or no origin saved
+        self._vanish_origin = None
+        self._vanish_pending = False
+        self._vanish_phase = None
+        self.anim.set_state("idle")
+        self.plan_in = self.rng.uniform(1.0, 3.0)
+        try:
+            self._say_dressed()
+        except Exception:
+            pass
+        self._schedule_next_vanish()
+        return False
+
+    def _cancel_vanish(self):
+        """Drop any trick in flight and the booking; safe to call twice.
+
+        Returns True when something was actually cancelled, so callers can
+        rebook only then.
+        """
+        was = self._vanish_pending or any(
+            getattr(self, attr) for attr in ("_vanish_next_timer",
+                                             "_vanish_hide_timer",
+                                             "_vanish_return_timer",
+                                             "_vanish_appear_timer"))
+        for attr in ("_vanish_next_timer", "_vanish_hide_timer",
+                     "_vanish_return_timer", "_vanish_appear_timer"):
+            src = getattr(self, attr)
+            if src:
+                GLib.source_remove(src)
+                setattr(self, attr, None)
+        self._vanish_pending = False
+        self._vanish_phase = None
+        return was
+
+    def _equip_random_cosmetic(self):
+        """Pick one random cosmetic from assets/cosmetics and remember it for 5 min."""
+        # cancel previous strip timer
+        if self._cosmetic_timer is not None:
+            try:
+                GLib.source_remove(self._cosmetic_timer)
+            except Exception:
+                pass
+            self._cosmetic_timer = None
+        try:
+            dirs = [d for d in COSMETICS_DIR.iterdir() if d.is_dir()]
+            if not dirs:
+                return
+            d = self.rng.choice(dirs)
+            meta = json.loads((d / "cosmetic.json").read_text(encoding="utf8"))
+            tex = meta.get("texture") or "texture.png"
+            p = d / tex
+            surf = cairo.ImageSurface.create_from_png(str(p)) if p.exists() else None
+            if surf is None:
+                return
+            self._cosmetic = meta
+            self._cosmetic_surf = surf
+            self._cosmetic_slot = meta.get("slot") or "head"
+            # auto-strip in 5 minutes with a line
+            self._cosmetic_timer = GLib.timeout_add_seconds(300, self._strip_cosmetic)
+        except Exception:
+            self._cosmetic = None
+            self._cosmetic_surf = None
+            self._cosmetic_slot = None
+
+    def _clear_cosmetic(self):
+        if self._cosmetic_timer is not None:
+            try:
+                GLib.source_remove(self._cosmetic_timer)
+            except Exception:
+                pass
+            self._cosmetic_timer = None
+        self._cosmetic = None
+        self._cosmetic_surf = None
+        self._cosmetic_slot = None
+        self.queue_draw()
+
+    def _strip_cosmetic(self):
+        """Called 5 min after equipping: say something, take it off."""
+        self._cosmetic_timer = None
+        if self._cosmetic is None:
+            return False
+        name = ""
+        try:
+            name = self._cosmetic.get("displayName", {}).get("ru") or self._cosmetic.get("id") or ""
+        except Exception:
+            pass
+        self._clear_cosmetic()
+        # a short remark so the undressing is not silent
+        try:
+            line = self.rng.choice([
+                f"снял {name} — жарко в нём",
+                "переоделся обратно",
+                "так, хватит маскарада",
+                f"{name} — прикольно, но пора без него",
+                "снял костюмчик",
+            ]) if name else self.rng.choice(["снял костюмчик", "переоделся", "так, хватит маскарада"])
+            self.say(line, secs=6)
+        except Exception:
+            pass
+        return False
+
+    def _say_dressed(self):
+        if self._cosmetic is None:
+            return
+        name = ""
+        try:
+            name = self._cosmetic.get("displayName", {}).get("ru") or self._cosmetic.get("id") or ""
+        except Exception:
+            pass
+        try:
+            line = self.rng.choice([
+                f"как тебе мой {name}?",
+                f"смотри, надел {name}!",
+                f"новый образ — {name}",
+                "ну как я выгляжу?",
+                f"зацени {name}!",
+                "мне идёт?",
+            ]) if name else self.rng.choice(["ну как я выгляжу?", "новый образ!", "зацени!"])
+            self.say(line, secs=7)
+        except Exception:
+            pass
+
     # -- bed ------------------------------------------------------------
     def go_to_bed(self, grace=False):
         """Curl up in the basket: the roaming window goes away entirely.
@@ -621,6 +900,9 @@ class Cat(Gtk.Window):
         no basket ever appears. Otherwise it would sit invisible with nothing
         to click.
         """
+        # a trick in flight would fight the basket over who hides the window
+        if self._cancel_vanish() and config.get("vanish_enabled"):
+            self._schedule_next_vanish()
         if self.prompting:
             self._end_prompt(None)     # asleep with the keyboard grabbed is a trap
         self._stop_typing()
@@ -646,6 +928,9 @@ class Cat(Gtk.Window):
         """Clicked in the basket — step back out next to it."""
         if not self.in_bed:
             return
+        # if the cat was mid-vanish, that trick ends here: it is visible now
+        if self._cancel_vanish() and config.get("vanish_enabled"):
+            self._schedule_next_vanish()
         self.bed.set_occupied(False)
         self.in_bed = False
         spot = self.bed.slot()
@@ -932,7 +1217,8 @@ class Cat(Gtk.Window):
         must be standing still, the machine must be quiet, and never more
         often than SCREEN_MIN.
         """
-        if not self.watch_screen or self.in_bed or self.streaming:
+        if not self.watch_screen or self.in_bed or self.streaming \
+                or self._vanish_pending:
             return
         if self.target is not None or self.anim.state == "sleep":
             return                              # busy walking, or asleep
@@ -1087,6 +1373,12 @@ class Cat(Gtk.Window):
             GLib.source_remove(self.type_timer)
             self.type_timer = None
 
+    def _type_blip(self):
+        """One click of the typewriter. sounds.play_type_sound throttles
+        itself (40 ms) and never blocks; this only honours the mute switch."""
+        if config.get("type_sound"):
+            sounds.play_type_sound()
+
     def type_out(self, text, on_done=None, cps=TYPE_CPS):
         """Reveal a line a character at a time, the way a thing that is
         thinking would type it.
@@ -1109,6 +1401,7 @@ class Cat(Gtk.Window):
         def tick():
             shown[0] += 1
             self.said = text[:shown[0]]
+            self._type_blip()
             if shown[0] < len(text):
                 return True
             self.type_timer = None
@@ -1233,6 +1526,8 @@ class Cat(Gtk.Window):
             # digits already entered were thrown away. Whatever this was, it
             # is less important than the question already on screen.
             return
+        if self._vanish_pending:
+            return      # the balloon is unmapped with the window; talk later
         now = time.monotonic()
         if spontaneous:
             if self.machine_busy() or self.away:
@@ -1294,6 +1589,7 @@ class Cat(Gtk.Window):
         if not self.said and chunk:
             self.anim.talk(True)   # first real word: only now does it open its mouth
         self.said += chunk
+        self._type_blip()          # one click per token, throttled inside
         return False
 
     def _finished(self, turn, full, err):
@@ -1506,6 +1802,9 @@ class Cat(Gtk.Window):
         cr.set_operator(cairo.OPERATOR_OVER)
         cr.translate(*self.origin)
         render.draw(cr, self.skin, self.textures, self.pose, self.height_px, self.facing)
+        if getattr(self, "_cosmetic_surf", None) is not None:
+            render.draw_cosmetic(cr, self.skin, self.pose, self.height_px, self.facing,
+                                 self._cosmetic, self._cosmetic_surf)
         # Nothing is drawn until there is something to say. An empty balloon
         # with a blinking caret, hanging there for the seconds the model needs
         # to read the prompt, advertises exactly how slow it is; appearing at

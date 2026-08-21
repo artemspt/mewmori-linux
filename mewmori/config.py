@@ -37,12 +37,18 @@ DEFAULTS = {
     "watch_telegram": False,
     # say out loud what the glance at the screen found, not only write it down
     "comment_screen": True,
+    # once in a while the cat vanishes for a couple of minutes and comes back
+    # wearing a random cosmetic; average gap 5-7 min as requested
+    "vanish_enabled": True,
+    "vanish_interval_min": 6,
     # how often it may speak unprompted, in seconds between remarks. 75 turned
     # out to be too quiet: every source shares this one floor, so music, tabs,
     # programs and the screen all queued behind each other
     "chatter_gap": 40.0,
     # carry the conversation across restarts
     "remember_session": True,
+    # a soft click while the cat types; paplay/aplay must exist for it to sound
+    "type_sound": True,
     # ask before sending anything to another human
     "telegram_confirm": True,
     # hearing "да"/"нет". Empty means: borrow whatever the `speak` checkout

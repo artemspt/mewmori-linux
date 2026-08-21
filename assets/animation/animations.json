@@ -123,6 +123,19 @@
       "base": [{ "clip": "idle_sit", "weight": 1 }],
       "overlays": ["breathe", "blink", "pose_small"],
       "effects": ["magic"]
+    },
+
+    "vanish": {
+      "base": [{ "clip": "vanish", "weight": 1 }]
+    },
+
+    "hidden": {
+      "base": [{ "clip": "hide", "weight": 1 }]
+    },
+
+    "appear": {
+      "base": [{ "clip": "appear", "weight": 1 }],
+      "effects": ["sparkle_pop"]
     }
   },
 
@@ -146,7 +159,10 @@
     "drag": "drag",
     "hiding": "hide",
     "hideAndSeek": "hide_and_seek",
-    "changingSkin": "change_skin"
+    "changingSkin": "change_skin",
+    "vanishing": "vanish",
+    "hidden": "hidden",
+    "appearing": "appear"
   },
 
   "reactions": {
