@@ -20,6 +20,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 import time
 
 from . import apps, chat
@@ -45,6 +46,17 @@ def _run(*argv, **kw):
 
 def has_active_window() -> bool:
     return _run("xdotool", "getactivewindow")
+
+
+def active_pid() -> int:
+    """PID окна, которое сейчас перед хозяином, или 0."""
+    try:
+        out = subprocess.run(["xdotool", "getactivewindow", "getwindowpid"],
+                             capture_output=True, text=True, timeout=2,
+                             stdin=subprocess.DEVNULL).stdout.strip()
+        return int(out) if out.isdigit() else 0
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return 0
 
 
 def active_window() -> tuple[str, str]:
@@ -81,7 +93,22 @@ def _player_args() -> list:
 
 
 def media(action: str) -> bool:
-    return _run("playerctl", *_player_args(), action)
+    if _run("playerctl", *_player_args(), action):
+        return True
+    # playerctl can only talk to a player that already exists. "Включи музыку"
+    # with Spotify closed is not a failed command, it is a request to open it —
+    # and pressing play has to wait until it has registered on the bus.
+    if action != "play" or not open_app(apps.BY_KEY.get(PLAYER)):
+        return False
+    threading.Thread(target=_play_when_ready, daemon=True).start()
+    return True
+
+
+def _play_when_ready(tries: int = 30) -> None:
+    for _ in range(tries):
+        time.sleep(1.0)
+        if _run("playerctl", *_player_args(), "play"):
+            return
 
 
 # -- windows and programs ----------------------------------------------------
@@ -140,7 +167,9 @@ def open_app(app) -> bool:
                          stderr=subprocess.DEVNULL)
         return True
     except OSError:
-        return False
+        # flatpak and snap put no binary on PATH — only a .desktop entry,
+        # which is what gtk-launch takes
+        return bool(app.desktop) and _run("gtk-launch", app.desktop)
 
 
 def show_desktop(want: bool) -> bool:
@@ -170,8 +199,11 @@ COMMANDS = {
     "media_pause": (["пауза", "поставь на паузу", "останови музыку",
                      "стоп музыка", "выключи музыку", "заглуши музыку"],
                     lambda: media("pause"), "заглушил музыку"),
+    # "поставь музыку" has to be listed: it is a literal, and without it the
+    # fuzzy pass hands it to "поставь на паузу", which is the exact opposite
     "media_play": (["включи музыку", "продолжи музыку", "возобнови музыку",
-                    "включи плейлист", "запусти плейлист", "играй музыку"],
+                    "включи плейлист", "запусти плейлист", "играй музыку",
+                    "поставь музыку", "включи спотифай", "врубай музыку"],
                    lambda: media("play"), "включил музыку"),
     "show_desktop": (["покажи рабочий стол", "сверни все окна",
                       "скрой все окна", "спрячь все окна"],

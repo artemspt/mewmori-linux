@@ -70,7 +70,16 @@ class Listener:
 
     def stop(self):
         self.keys.stop()
+        self.recording = self.chord_recording = self.ask_recording = False
+        self._stop_stream.set()
         self.ears.stop_wake()
+        # every open PortAudio stream has to be shut before the interpreter
+        # tears the library down, or the process aborts on its way out
+        for rec in (self.rec, self.chord_rec, self.ask_rec):
+            try:
+                rec.stop()
+            except Exception:
+                pass
 
     # -- what the owner sees ------------------------------------------------
     def _say(self, text, secs=6.0):
@@ -273,11 +282,14 @@ class Listener:
             text = self.ears.transcribe(audio, beam_size=5, language="ru",
                                         hotwords=ears.HOTWORDS)
             actions = commands.match(text)
+            log(f"команда: {text!r} -> {actions or 'вопрос'}")
             if not actions:
                 # not a command — so it was a question, and the cat answers it
                 # in its own voice rather than saying "не распознано"
                 if text.strip():
-                    GLib.idle_add(self.cat.ask, text.strip(), False, False, True)
+                    # the same door typed input goes through, so a spoken
+                    # reminder or word card is not quietly turned into chat
+                    GLib.idle_add(self.cat.heard, text.strip())
                 else:
                     self._say("не расслышал")
                 return
@@ -327,6 +339,6 @@ class Listener:
                 return
             # straight into the cat's own conversation: same character, same
             # history, same journal — asking out loud is not a separate mode
-            GLib.idle_add(self.cat.ask, text.strip(), False, False, True)
+            GLib.idle_add(self.cat.heard, text.strip())
         finally:
             self.busy = False

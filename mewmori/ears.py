@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import threading
 import time
 
@@ -83,6 +84,51 @@ def model_path() -> str:
     return voice.model_path()
 
 
+# -- which microphone --------------------------------------------------------
+def sources() -> list:
+    """(имя, как показать) для каждого настоящего входа, который видит pulse.
+
+    The long form rather than `list short`: node names like
+    `alsa_input.pci-0000_13_00.6.analog-stereo` are unreadable, and pulse
+    already carries a human description for exactly this.
+    """
+    try:
+        out = subprocess.run(["pactl", "list", "sources"],
+                             capture_output=True, text=True, timeout=3).stdout
+    except (OSError, subprocess.SubprocessError):
+        return []
+    found, name = [], ""
+    for line in out.splitlines():
+        line = line.strip()
+        if line.startswith("Name:"):
+            name = line[5:].strip()
+        elif line.startswith("Description:") and name:
+            # a monitor is what the speakers are playing, not an input
+            if not name.endswith(".monitor"):
+                found.append((name, line[12:].strip() or name))
+            name = ""
+    return found
+
+
+def use_source() -> None:
+    """Point the ALSA `pulse` plugin at the chosen microphone, for us only.
+
+    Recording goes through the `pulse` device, which follows whatever pulse
+    calls the *default* source. Here that default was the empty analog jack on
+    the motherboard — humming away at -28 dBFS — while the real USB microphone
+    sat idle: the cat heard a wall of noise and recognised nothing out of it,
+    which looks exactly like broken hotkeys.
+
+    PULSE_SOURCE overrides the default for this process alone, so choosing the
+    cat's microphone does not move everybody else's.
+    """
+    name = config.get("voice_source") or ""
+    if name:
+        os.environ["PULSE_SOURCE"] = name
+    else:
+        os.environ.pop("PULSE_SOURCE", None)
+
+
 class Recorder:
     """Holds an open input stream and hands out what it has heard so far."""
 
@@ -94,6 +140,7 @@ class Recorder:
 
     def start(self):
         import sounddevice as sd
+        use_source()
         self._frames = []
         # through pulse/pipewire rather than a raw ALSA device: hardware
         # inputs often refuse a fixed 16 kHz outright, where the sound server
@@ -136,6 +183,7 @@ class Ears:
         self.gpu_lock = threading.Lock()
         self._wake_stop = threading.Event()
         self._wake_thread = None
+        self._closing = False       # asked to shut down for good, not to pause
         self.ready = threading.Event()
         threading.Thread(target=self._load_model, daemon=True).start()
 
@@ -152,11 +200,28 @@ class Ears:
         try:
             self.model = WhisperModel(path, device=device, compute_type=compute)
         except Exception as e:
-            self.log(f"whisper на {device} не поднялся ({str(e)[:80]}), пробую CPU")
+            # Measured: this model answers in 0.01 s on the card and 1.05 s on
+            # the processor, and the wake word runs the pass every second. It
+            # is worth taking the card back for.
+            #
+            # The card is full because ollama is holding a thirteen-gigabyte
+            # model in a twelve-gigabyte space. Hearing needs half a gigabyte
+            # and needs it constantly; talking needs all of it and needs it
+            # rarely — and reloads itself on the next reply anyway. So the
+            # language model is asked to leave, once, and hearing goes first.
+            from . import chat
+            self.log(f"whisper на {device} не влез ({str(e)[:60]}), "
+                     f"освобождаю видеопамять")
+            freed = chat.unload()
             try:
-                self.model = WhisperModel(path, device="cpu", compute_type="int8")
-            except Exception as e2:
-                self.error = str(e2)[:160]
+                self.model = WhisperModel(path, device=device, compute_type=compute)
+                self.log(f"whisper на {device}, выгрузив {', '.join(freed) or 'ничего'}")
+            except Exception:
+                self.log("всё равно не влез, остаюсь на CPU")
+                try:
+                    self.model = WhisperModel(path, device="cpu", compute_type="int8")
+                except Exception as e2:
+                    self.error = str(e2)[:160]
         self.ready.set()
         if self.model and config.get("wake_word_enabled"):
             self.start_wake()
@@ -191,14 +256,34 @@ class Ears:
 
     # -- the wake word -----------------------------------------------------
     def start_wake(self):
+        if self._closing:
+            # the model loads on its own thread and calls this when it is
+            # ready: without the guard, a cat asked to quit mid-load opened a
+            # microphone on the way out
+            return
         if self._wake_thread and self._wake_thread.is_alive():
             return
         self._wake_stop.clear()
         self._wake_thread = threading.Thread(target=self._wake_loop, daemon=True)
         self._wake_thread.start()
 
-    def stop_wake(self):
+    def stop_wake(self, timeout: float = 3.0):
+        """Wait for the stream to actually close, not just ask it to.
+
+        Setting the flag and walking away let the interpreter reach
+        sounddevice's atexit hook while the input stream was still open, and
+        Pa_Terminate aborts on that — "double free or corruption (out)".
+
+        From the outside that looked like the cat ignoring kill: the first
+        SIGTERM tore down the frame loop, the teardown then died inside
+        PortAudio, and the sprite stayed painted on the desktop with nothing
+        left running to move it. Which is exactly the shape of the bug report.
+        """
+        self._closing = True
         self._wake_stop.set()
+        thread, self._wake_thread = self._wake_thread, None
+        if thread and thread.is_alive() and thread is not threading.current_thread():
+            thread.join(timeout)
 
     def _wake_loop(self):
         """A cheap VAD runs continuously; Whisper only when speech was heard.
@@ -220,6 +305,7 @@ class Ears:
                     total -= frames[0].shape[0]
                     frames.pop(0)
 
+        use_source()
         device = config.get("voice_input") or "pulse"
         try:
             stream = sd.InputStream(device=device, samplerate=SAMPLE_RATE,

@@ -37,16 +37,36 @@ DEFAULTS = {
     "watch_telegram": False,
     # say out loud what the glance at the screen found, not only write it down
     "comment_screen": True,
+    # keep the last five minutes of what was typed, in memory, as context —
+    # never journaled, paused while the cat itself is asking for a secret
+    "watch_typing": True,
+    # when the cat sees English being learned, screenshot more often and lift
+    # word/translation pairs it reads straight into the card deck
+    "study_watch": True,
+    "study_cards": True,
+    # empty = the auto-picked iq2 model reads the screen — and measured best
+    # for this: precise and ~12 s. A big VLM (qwen2.5vl:32b) over-reads whole
+    # subtitles and is ~70 s, so the override exists but is rarely worth it
+    "vision_model": "",
     # once in a while the cat vanishes for a couple of minutes and comes back
     # wearing a random cosmetic; average gap 5-7 min as requested
     "vanish_enabled": True,
     "vanish_interval_min": 6,
+    # auto-pause when a heavy game is in front or CPU is high
+    "game_pause_enabled": True,
+    "game_pause_cpu": 60.0,
+    "game_pause_on_fullscreen": True,
     # how often it may speak unprompted, in seconds between remarks. 75 turned
     # out to be too quiet: every source shares this one floor, so music, tabs,
     # programs and the screen all queued behind each other
     "chatter_gap": 40.0,
     # carry the conversation across restarts
     "remember_session": True,
+    # nudge to get up after this long without switching away from one program
+    "break_enabled": True,
+    "break_after_min": 90,
+    # the cat has introduced itself and asked who it is living with
+    "greeted": False,
     # a soft click while the cat types; paplay/aplay must exist for it to sound
     "type_sound": True,
     # ask before sending anything to another human
@@ -59,6 +79,9 @@ DEFAULTS = {
     # -- the voice stack moved over from `speak` --------------------------
     "voice_enabled": False,     # off until the packages are actually there
     "voice_input": "pulse",     # raw ALSA devices refuse a fixed 16 kHz
+    # which microphone, by pulse source name. Empty means the system default —
+    # which is often an empty analog jack humming next to the real one
+    "voice_source": "",
     "voice_device": "cuda",
     "voice_compute": "float16",
     "voice_language": "ru",

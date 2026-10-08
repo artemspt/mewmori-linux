@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +29,33 @@ CONFIG = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "mew
 HOSTS = CONFIG / "hosts.json"
 CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "mewmori"
 ASKPASS = CACHE / "askpass.sh"
+HEARTBEAT = CACHE / "heartbeat"
+
+
+def beat() -> None:
+    """Отметить, что кот жив сейчас. Пишется раз в минуту из цикла кадров."""
+    try:
+        CACHE.mkdir(parents=True, exist_ok=True)
+        HEARTBEAT.write_text(str(int(time.time())), encoding="utf8")
+    except OSError:
+        pass
+
+
+def off_gap() -> float:
+    """Секунд между тем, как кот последний раз работал, и запуском сейчас.
+
+    Приблизительно — сколько компьютер простоял выключенным: кот пишет
+    отметку раз в минуту, пока система работает, так что разрыв между
+    последней отметкой и стартом это либо выключенный компьютер, либо
+    закрытый кот. Первого несравнимо больше, и для приветствия этого хватает.
+    Точное «сколько был выключен» требовало бы времени последнего shutdown из
+    journald — хрупкого и лишнего ради одной фразы.
+    """
+    try:
+        last = int(HEARTBEAT.read_text(encoding="utf8").strip())
+    except (OSError, ValueError):
+        return 0.0
+    return max(0.0, time.time() - last)
 
 SEP = "@@"
 # one command, one round trip: anything more chatty would mean several ssh
@@ -182,6 +211,47 @@ def remote(spec: dict, timeout: float = 15.0) -> Reading:
         return _parse(name, p.stdout)
     except (ValueError, IndexError) as e:
         return Reading(name=name, error=f"не разобрал ответ: {e}")
+
+
+def vram() -> tuple:
+    """(занято, всего) в мегабайтах, или (0, 0) если карты нет.
+
+    The number that actually matters when a game starts: the processor can sit
+    at 50% while the thing that is really missing is video memory a language
+    model is holding.
+    """
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.used,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=4,
+            stdin=subprocess.DEVNULL).stdout.strip().splitlines()
+        used, total = (int(x) for x in out[0].split(","))
+        return used, total
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return 0, 0
+
+
+def vram_apps() -> dict:
+    """{pid: МиБ} — кто именно занимает видеопамять.
+
+    `--query-compute-apps` shows only CUDA clients: ollama and whisper appear,
+    the game does not, because it draws rather than computes. The plain table
+    lists both, so it is the plain table that gets read.
+    """
+    try:
+        out = subprocess.run(["nvidia-smi"], capture_output=True, text=True,
+                             timeout=5, stdin=subprocess.DEVNULL).stdout
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    apps = {}
+    for line in out.splitlines():
+        # |    0   N/A  N/A     18611      G   .../java       1064MiB |
+        found = re.search(r"\|\s+\d+\s+\S+\s+\S+\s+(\d+)\s+[GC]\+?\s+.*?(\d+)MiB",
+                          line)
+        if found:
+            apps[int(found.group(1))] = int(found.group(2))
+    return apps
 
 
 def load_hosts() -> list[dict]:

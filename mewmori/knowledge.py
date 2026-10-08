@@ -125,7 +125,26 @@ def _slug(subject: str) -> str:
 
 
 def path_for(subject: str) -> Path:
-    return KNOWLEDGE / f"{_slug(subject)}.md"
+    """Where a subject is filed — folded onto a near-identical one if it exists.
+
+    The model picks the topic afresh every night and picks a different word for
+    the same thing every time: инструмент and инструменты, сервер and серверы,
+    hobby and хобби each ended up as their own file holding one restatement of
+    the other. Thirty-two topics of three lines is not a richer memory than
+    eight of twelve — it is the same memory, shredded, and recall then spends
+    all three of its slots on one fact said three ways.
+    """
+    slug = _slug(subject)
+    exact = KNOWLEDGE / f"{slug}.md"
+    if exact.exists():
+        return exact
+    try:
+        for path in sorted(KNOWLEDGE.glob("*.md")):
+            if _agree(slug, path.stem):
+                return path
+    except OSError:
+        pass
+    return exact
 
 
 def add(subject: str, text: str, when: date | None = None) -> bool:
@@ -135,9 +154,12 @@ def add(subject: str, text: str, when: date | None = None) -> bool:
         return False
     when = when or date.today()
     path = path_for(subject)
-    existing = {f.text for f in read(subject)}
-    if text in existing:
-        return False              # the model repeats itself across days
+    existing = _parse(path, subject)
+    # not just an exact repeat: the model restates yesterday's fact in new
+    # words most nights — "Настраивает PostgreSQL и репликацию" against
+    # "Хозяин настраивает PostgreSQL и диагностирует сетевые проблемы"
+    if any(alike(text, f.text) for f in existing):
+        return False
     try:
         KNOWLEDGE.mkdir(parents=True, exist_ok=True)
         if not path.exists():
@@ -211,6 +233,23 @@ def _agree(a: str, b: str) -> bool:
     return len(short) >= MIN_STEM and long_.startswith(short[:max(MIN_STEM, len(short) - 2)])
 
 
+SAME = 0.6              # share of words two facts must have in common to be one
+
+
+def alike(a: str, b: str) -> bool:
+    """Two lines saying the same thing in different words.
+
+    Jaccard over stems, not an exact match: the nightly pass paraphrases. The
+    threshold errs high, because merging two genuinely different facts loses
+    memory while keeping one duplicate only wastes a slot.
+    """
+    ta, tb = set(tokens(a)), set(tokens(b))
+    if not ta or not tb:
+        return a.strip().lower() == b.strip().lower()
+    shared = sum(1 for w in ta if any(_agree(w, v) for v in tb))
+    return shared / max(len(ta), len(tb)) >= SAME
+
+
 def score(fact: Fact, want: list, now: date) -> float:
     have = tokens(fact.plain()) + tokens(fact.subject) + list(fact.links)
     if not have or not want:
@@ -235,7 +274,16 @@ def search(query: str, limit: int = 5, now: date | None = None,
     ranked = [(score(f, want, now), f) for f in everything()]
     ranked = [(s, f) for s, f in ranked if s >= floor]
     ranked.sort(key=lambda pair: (-pair[0], -pair[1].when.toordinal()))
-    return [f for _s, f in ranked[:limit]]
+    # three slots spent on one fact reworded three times is the same as having
+    # one fact, except the cat also sounds like it is stuck
+    out = []
+    for _s, fact in ranked:
+        if any(alike(fact.text, kept.text) for kept in out):
+            continue
+        out.append(fact)
+        if len(out) >= limit:
+            break
+    return out
 
 
 def recall(query: str, limit: int = 5, now: date | None = None) -> str:
@@ -243,6 +291,63 @@ def recall(query: str, limit: int = 5, now: date | None = None) -> str:
     now = now or date.today()
     found = search(query, limit=limit, now=now)
     return "\n".join(f"{since(f.when, now)}: {f.plain()}" for f in found)
+
+
+def tidy() -> tuple[int, int]:
+    """Merge topics that are the same word twice and drop restated facts.
+
+    The write path stops new duplicates; this is for the pile that built up
+    before it existed. Returns (topics merged, facts dropped). Nothing is lost
+    that was not already said elsewhere, and the surviving line keeps the
+    earlier date — when the owner first said it is the true one.
+    """
+    try:
+        paths = sorted(KNOWLEDGE.glob("*.md"))
+    except OSError:
+        return 0, 0
+    # longest stem wins the merge, so "инструменты" absorbs "инструмент"
+    # rather than the pair keeping whichever was read first
+    keepers: dict[str, list] = {}
+    merged = 0
+    for path in sorted(paths, key=lambda p: (-len(p.stem), p.stem)):
+        home = next((k for k in keepers if _agree(k, path.stem)), None)
+        if home is None:
+            keepers[path.stem] = list(_parse(path, _title(path)))
+        else:
+            keepers[home] += _parse(path, _title(path))
+            merged += 1
+
+    dropped = 0
+    for stem, facts in keepers.items():
+        facts.sort(key=lambda f: f.when)
+        kept = []
+        for fact in facts:
+            if any(alike(fact.text, k.text) for k in kept):
+                dropped += 1
+                continue
+            kept.append(fact)
+        path = KNOWLEDGE / f"{stem}.md"
+        body = "".join(f"- {f.when.isoformat()} · {f.text}\n" for f in kept)
+        try:
+            path.write_text(f"# {_title(path) or stem}\n\n{body}", encoding="utf8")
+        except OSError:
+            continue
+    for path in paths:                      # whatever was folded into a keeper
+        if path.stem not in keepers:
+            try:
+                path.unlink()
+            except OSError:
+                pass
+    return merged, dropped
+
+
+def _title(path: Path) -> str:
+    """The heading a file was written with, so a merge does not rename it."""
+    try:
+        head = path.read_text(encoding="utf8").splitlines()[0]
+    except (OSError, IndexError):
+        return path.stem
+    return head[2:].strip() if head.startswith("# ") else path.stem
 
 
 def forget(pattern: str) -> int:
@@ -256,21 +361,27 @@ def forget(pattern: str) -> int:
             lines = path.read_text(encoding="utf8").splitlines()
         except OSError:
             continue
-        kept = []
+        kept, dropped = [], 0
         for line in lines:
             m = FACT_LINE.match(line)
             if m and needle in m.group(2).lower():
-                gone += 1
+                dropped += 1
                 continue
             kept.append(line)
-        if gone:
-            try:
-                if any(FACT_LINE.match(x) for x in kept):
-                    path.write_text("\n".join(kept) + "\n", encoding="utf8")
-                else:
-                    path.unlink()          # nothing left but the heading
-            except OSError:
-                pass
+        # per file, not cumulative: a running total made this true for every
+        # *later* file too, and a file that matched nothing but happened to
+        # hold no dated bullets — a note written by hand in Obsidian — was
+        # deleted outright
+        if not dropped:
+            continue
+        gone += dropped
+        try:
+            if any(FACT_LINE.match(x) for x in kept):
+                path.write_text("\n".join(kept) + "\n", encoding="utf8")
+            else:
+                path.unlink()          # nothing left but the heading
+        except OSError:
+            pass
     return gone
 
 

@@ -23,6 +23,7 @@ class App:
     # *notices* leave these empty.
     wm_class: str = ""
     launch: tuple = ()
+    desktop: str = ""         # .desktop id, for flatpak/snap installs with no binary on PATH
     said: tuple = ()          # how the owner calls it out loud
     game: bool = False        # while this is in front, the owner is playing
 
@@ -51,7 +52,7 @@ CATALOGUE = (
         said=("майнкрафт", "minecraft", "призму"), game=True),
     App("spotify", "Spotify", "музыка",
         ("/spotify",), wm_class="spotify", launch=("spotify",),
-        said=("спотифай", "spotify")),
+        desktop="com.spotify.Client", said=("спотифай", "spotify")),
     App("steam", "Steam", "игровая платформа: хозяин собрался играть",
         ("/steam", "steamwebhelper"), wm_class="steam", launch=("steam",),
         said=("стим", "steam"), game=True),

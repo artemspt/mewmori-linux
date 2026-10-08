@@ -228,9 +228,6 @@ class Login(_Client):
         super().__init__()
         self.phone = ""
 
-    def already_in(self) -> bool:
-        return bool(self.me)
-
     def send_code(self, phone: str, on_done):
         self.phone = phone.strip()
         self._call(lambda: self.client.send_code_request(self.phone), on_done)

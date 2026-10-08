@@ -114,6 +114,38 @@ def _strip_think(chunk, inside):
     return "".join(out), inside
 
 
+def loaded(host=HOST) -> list:
+    """Models ollama is holding in memory right now."""
+    try:
+        with urllib.request.urlopen(f"{host}/api/ps", timeout=3) as r:
+            return [m["name"] for m in json.loads(r.read()).get("models", [])]
+    except Exception:
+        return []
+
+
+def unload(model: str = "", host=HOST) -> list:
+    """Drop models out of video memory and say which ones went.
+
+    `keep_alive: 0` is ollama's own way of saying "forget this now" — the model
+    would otherwise sit there for its whole keep-alive window. Hiding the cat's
+    window saves a couple of megabytes of GTK; the eleven gigabytes are here,
+    and this is the only thing that gives them back to whatever needs them.
+    """
+    gone = []
+    for name in ([model] if model else loaded()):
+        if not name:
+            continue
+        body = json.dumps({"model": name, "keep_alive": 0}).encode()
+        req = urllib.request.Request(f"{host}/api/generate", data=body,
+                                     headers={"Content-Type": "application/json"})
+        try:
+            urllib.request.urlopen(req, timeout=30).read()
+            gone.append(name)
+        except Exception:
+            continue
+    return gone
+
+
 SENTENCE_END = ".!?…"
 
 

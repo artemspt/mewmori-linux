@@ -6,8 +6,10 @@ import json
 import math
 import os
 import random
+import re
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -28,8 +30,9 @@ from . import bed as bed_mod  # noqa: E402
 from . import claude as claude_mod  # noqa: E402
 from . import ears as ears_mod  # noqa: E402
 from . import keys  # noqa: E402
-from . import apps, chat, commands, config, health, knowledge, memory, music  # noqa: E402
-from . import notify, prefs, project, render, sounds, tabs, telegram, voice  # noqa: E402
+from . import apps, cards, chat, commands, config, health, knowledge, memory, music  # noqa: E402
+from . import notify, prefs, project, remind, render, screentime  # noqa: E402
+from . import sounds, study, tabs, telegram, typed, voice  # noqa: E402
 from .rig import Animator, Library, Skin  # noqa: E402
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
@@ -44,6 +47,73 @@ IDE_POLL = 20.0         # s between checks for an open IDE
 CODE_COOLDOWN = 300.0   # s between unprompted remarks about the code
 CPU_CEILING = 60.0      # % busy above which the cat keeps its thoughts to itself
 APP_COOLDOWN = 90.0     # s between remarks about programs starting
+# «запомни слово brittle» / «карточка: brittle — хрупкий». The translation is
+# optional: left out, the model supplies it
+# The verb is required: "слово за слово" is a turn of phrase, and a bare noun
+# would have made every sentence containing "слово" into a card
+CARD_RE = re.compile(
+    r"^(?:кот[,\s]+)?(?:(?:запомни|запиши|добавь|выучи)\s+(?:новое\s+)?слов\w*"
+    r"|карточк\w*)\s*[:\-—]?\s*"
+    r"(?P<word>[^\-—:]+?)\s*(?:[-—:]\s*(?P<back>.+))?$",
+    re.IGNORECASE)
+CARD_MAX = 40           # letters: past this it is a sentence, not a word
+
+# «создай карточки с неправильными глаголами» — набор по теме, а не одно слово.
+# Это была дыра: под разбор одного слова такая просьба не подходила, уходила в
+# обычную реплику, и кот на неё просто болтал.
+DECK_RE = re.compile(
+    # «карточ\w*», а не «карточк\w*»: в родительном падеже это «карточек», где
+    # беглая «е» разрывает основу, и «накидай карточек» не совпадало
+    r"^(?:кот[,\s]+)?(?:создай|сделай|сгенерируй|набери|накидай|составь)\s+"
+    r"(?:мне\s+)?карточ\w*\s*"
+    r"(?:(?:по|с|на|про|из|для)\s+)?(?:тем[уе]\s+)?(?P<topic>.+?)\s*$",
+    re.IGNORECASE)
+DECK_SIZE = 15          # слов в наборе: больше модель начинает повторяться
+DECK_PROMPT = (
+    "Составь список из {n} английских слов или выражений по теме «{topic}» "
+    "для человека, который учит английский.\n"
+    "Формат — строго по одной паре на строку, разделитель «|», больше ничего:\n"
+    "english | перевод на русский\n"
+    "Без нумерации, без заголовков, без markdown, без пояснений. "
+    "Если тема про неправильные глаголы — в первой части пиши все три формы "
+    "через запятую (go, went, gone). Не повторяй слова."
+)
+MEET_DELAY = 6.0        # s before the cat introduces itself on a first run
+# «1. go, went, gone — идти» → ("go, went, gone", "идти"). Модель обещали
+# просить без нумерации и без markdown, но просьба — это не гарантия
+_PAIR_JUNK = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
+_PAIR_SPLIT = re.compile(r"\s*[|–—]\s*|\s+[-]\s+")
+
+
+def _looks_english(text: str) -> bool:
+    """Латиница есть, кириллицы нет — чтобы модель не завела карточку из перевода
+    в лицевую сторону, перепутав, что где."""
+    return bool(re.search(r"[a-zA-Z]", text)) and not re.search(r"[а-яА-Я]", text)
+
+
+def parse_pairs(text: str, limit: int = 40) -> list:
+    """Строки «english | перевод» из ответа модели, без мусора вокруг."""
+    out, seen = [], set()
+    for line in (text or "").splitlines():
+        line = _PAIR_JUNK.sub("", line.strip().strip("`"))
+        if not line or line.lower().startswith(("вот ", "here", "список")):
+            continue
+        parts = _PAIR_SPLIT.split(line, maxsplit=1)
+        if len(parts) != 2:
+            continue
+        front, back = parts[0].strip(" *_\""), parts[1].strip(" *_\"")
+        key = front.lower()
+        if not front or not back or key in seen or len(front) > 60:
+            continue
+        seen.add(key)
+        out.append((front, back))
+        if len(out) >= limit:
+            break
+    return out
+# when a question is about the clock, today's tally is worth pasting in
+TIME_WORDS = re.compile(
+    r"скольк|долго|врем|часо|минут|сегодня|игра|сидел|просидел|занима|устал",
+    re.IGNORECASE)
 IDLE_ASK = 300.0        # s without input before the cat checks you are still there
 ASK_WAIT = 90.0         # s it waits for an answer before deciding you left
 BACK_AT = 8.0           # s of idle below which you count as present again
@@ -51,6 +121,24 @@ BED_GRACE = 25.0        # s to wait for the panel applet before giving up on it
 SCREEN_MIN = 300.0      # s the screen is never looked at more often than
 SCREEN_IDLE = (420.0, 1080.0)   # s of nothing happening before a glance anyway
 SCREEN_WIDTH = 1024     # px the screenshot is shrunk to before it is looked at
+# learning English: notice cheaply, confirm by looking, then look every minute
+STUDY_SCAN = 15.0       # s between "is he studying English?" cheap checks
+STUDY_CONFIRM = 90.0    # s between confirming screenshots before the mode is on
+STUDY_EVERY = 60.0      # s between screenshots once it is on — "каждую минуту"
+STUDY_WINDOW = 240.0    # s the mode stays on after the last confirmed glance
+STUDY_HINTS = ("english", "англ", "vocabulary", "grammar", "idiom", "phrasal",
+               "duolingo", "volkaenglish", "reverso", "translate", "переводчик")
+STUDY_PROMPT = (
+    "Посмотри на экран. Учит ли хозяин прямо сейчас английский — смотрит "
+    "перевод, урок, субтитры, спросил слово у переводчика или ассистента? "
+    "ПЕРВОЙ строкой ответь только YES или NO.\n"
+    "Затем, ТОЛЬКО если хозяин смотрит перевод одного конкретного слова или "
+    "короткой фразы, выпиши одну строку — само это слово и его перевод:\n"
+    "english | перевод\n"
+    "Ровно одна пара, то главное слово, что он изучает. НЕ выписывай примеры, "
+    "предложения, производные слова, названия, бренды и рекламу. Если такого "
+    "одного слова нет — не пиши ничего после YES/NO."
+)
 HEALTH_POLL = 60.0      # s between looks at this machine's disk and memory
 REMOTE_POLL = 300.0     # s between ssh round trips to the other machines
 TABS_POLL = 45.0        # s between reads of the browser session file
@@ -73,6 +161,25 @@ PLAY_GLANCE = 1.5
 # session. A build still shuts the cat up; a game does not.
 PLAY_CEILING = 92.0
 FRONT_POLL = 4.0        # s between checks of which window is in front
+# px of slack around the cat that still counts as grabbing it
+GRAB_MARGIN = 6
+RESHAPE_EVERY = 0.4     # s between re-cuts of the click region
+REMIND_POLL = 20.0      # s between looks at what is due
+# MiB of video memory left free below which nobody can load anything useful.
+# Only counted when the shortage is not the cat's own model.
+VRAM_FLOOR = 2048
+# MiB the foreground game itself must be holding before the cat gets out
+# of its way. Plain Minecraft sits near 1000; shaders push it far past this.
+GAME_HUNGRY = 2048
+VRAM_POLL = 6.0
+# s the "card is full and not ours" verdict must hold before the cat acts on
+# it. A game start holds for the whole session; a model load blips for one poll
+GAME_CONFIRM = 12.0
+CARDS_COOLDOWN = 21600.0   # s between nudges about cards: six hours, not an alarm
+CARDS_NUDGE = 5            # fewer than this waiting is not worth a word
+# said without the model, because saying it is the last thing before the model
+# is unloaded — asking it to compose this would need the memory being freed
+NAP_LINE = "вижу, ресурсов не хватает. пойду посплю, восстановлюсь"
 # The vanishing act. The hide timer is 700 ms, not the clip's full 800: a
 # non-loop base clip is restarted by the animator the moment it ends, and the
 # restart blends back toward visible — hiding at 700 ms catches the cat while
@@ -202,8 +309,13 @@ class Cat(Gtk.Window):
         self.notes = notify.Listener(start=bool(config.get("watch_notifications")))
         self.break_now = False      # something just ended: a fair moment to interrupt
         self.gap = float(config.get("chatter_gap"))
+        self._shaped_for = None     # box the click region was cut for
+        self.reshape_in = 0.5
         self.front = None           # the catalogued program in front, if any
         self.front_in = 0.0
+        self.time = screentime.Tracker()    # how long today went where
+        self.nagged_at = 0.0        # unbroken seconds at the last "пора размяться"
+        self.remind_in = 5.0
         self.tg = None              # Telegram client, built on the first errand
         self.listening = False      # the microphone is open, waiting for да/нет
         self.type_timer = None      # the typewriter effect in the balloon
@@ -214,6 +326,23 @@ class Cat(Gtk.Window):
             GLib.idle_add(self._start_voice)     # loads a model: not on the way in
         self.screen_at = 0.0        # when the screen was last looked at
         self.screen_due = 120.0     # ...and when it is next worth a look
+        # learning English: a hint escalates to a confirming look, YES turns on
+        # a minute-by-minute glance that harvests words while it holds
+        self.study_until = 0.0      # monotonic: study mode is on until this
+        self.study_at = 0.0         # when the last study screenshot happened
+        self.study_scan_in = 20.0
+        # how long the machine was off before this run, and a live heartbeat
+        self.off_gap = health.off_gap()
+        health.beat()
+        self.beat_in = 60.0
+        self.boot_mono = time.monotonic()
+        # the last five minutes of typing, in memory, as context
+        self.typed = None
+        if config.get("watch_typing"):
+            t = typed.Typed()
+            if not t.error:
+                t.start()
+                self.typed = t
         self.track = None
         self.track_timer = None
         self.project = None
@@ -244,6 +373,14 @@ class Cat(Gtk.Window):
         self._cosmetic_surf = None        # cairo surface for the cosmetic texture
         self._cosmetic_slot = None
         self._cosmetic_timer = None       # GLib source for auto-strip in 5 min
+        self._game_paused = False    # true while the memory belongs to a game
+        self.heavy_for = 0.0         # s the card has looked taken by someone else
+        self.light_for = 0.0         # ...and s it has looked free again
+        self.ours = True             # ollama is holding a model, sampled on a timer
+        self.napping = False         # asleep in a corner until it is free again
+        self.vram = (0, 0)           # (used, total) MiB, refreshed on a timer
+        self.game_vram = 0           # MiB the foreground game holds
+        self.vram_in = 0.0
 
         self.bed = bed_mod.PanelBed(self.wake_up, self.go_to_bed)
 
@@ -251,6 +388,13 @@ class Cat(Gtk.Window):
         GLib.timeout_add(FRAME_MS, self._tick)
         if config.get("vanish_enabled"):
             self._schedule_next_vanish()
+        # a filled-in name means this is not a first run, whatever the flag
+        # says: the flag arrived after the setting did, and grabbing the
+        # keyboard to ask an existing owner their name is not an introduction
+        if not config.get("greeted") and not config.get("owner"):
+            # not immediately: the balloon grabs the keyboard, and doing that
+            # while the desktop is still coming up steals the first thing typed
+            GLib.timeout_add_seconds(int(MEET_DELAY), self._meet)
 
     # -- setup ---------------------------------------------------------
     def load_skin(self, skin_id):
@@ -287,19 +431,53 @@ class Cat(Gtk.Window):
         self.connect("realize", lambda *_: self._shape())
         self.connect("destroy", Gtk.main_quit)
 
-    def _shape(self):
-        """Only the cat's own box catches clicks; the rest of the window is see-through."""
+    def _shape(self, box=None):
+        """Only the cat's own box catches clicks; the rest is see-through.
+
+        `box` is the box of the pose being drawn *now*, not of the standing
+        cat. The difference is not small: asleep, the cat lies 41 px lower than
+        it stands, so the region computed once from the resting pose left 41 px
+        of empty air at the top that swallowed clicks, and nothing at all
+        underneath the body where a hand naturally reaches for a lying cat.
+        """
+        box = box or self.bounds
         ox, oy = self.origin
         r = cairo.RectangleInt(
-            int(ox + self.bounds[0]) - 4,
-            int(oy + self.bounds[1]) - 4,
-            int(self.bounds[2] - self.bounds[0]) + 8,
-            int(self.bounds[3] - self.bounds[1]) + 8,
+            int(ox + box[0]) - GRAB_MARGIN,
+            int(oy + box[1]) - GRAB_MARGIN,
+            int(box[2] - box[0]) + 2 * GRAB_MARGIN,
+            int(box[3] - box[1]) + 2 * GRAB_MARGIN,
         )
         self.input_shape_combine_region(cairo.Region(r))
 
+    def _reshape_for_pose(self, dt):
+        """Follow the silhouette as the cat settles into a pose.
+
+        On a timer rather than on the state change, because a clip blends in
+        over a fraction of a second: cutting the region the instant the state
+        flips measures the cat halfway between standing and lying, which is a
+        shape it holds for no time at all.
+        """
+        self.reshape_in -= dt
+        if self.reshape_in > 0 or not self.pose:
+            return
+        self.reshape_in = RESHAPE_EVERY
+        try:
+            box = render.pose_bounds(self.skin, self.textures,
+                                     self.height_px, self.pose)
+        except Exception:
+            box = self.bounds
+        old = self._shaped_for
+        # a couple of pixels of breathing is not worth re-cutting the region for
+        if old and max(abs(a - b) for a, b in zip(box, old)) < 4:
+            return
+        self._shaped_for = box
+        self._shape(box)
+
     # -- behaviour -----------------------------------------------------
     def _plan(self):
+        if self.napping:
+            return          # asleep in a corner, nothing to decide
         # gone or going: no idle/walk planning until the trick is over
         if self._vanish_pending:
             return
@@ -385,10 +563,64 @@ class Cat(Gtk.Window):
             self._check_apps(now)
             self._check_ide()
 
+        self.vram_in -= dt
+        if self.vram_in <= 0:
+            self.vram_in = VRAM_POLL
+            self.vram = health.vram()
+            # not `apps` — that is the module, and shadowing it here made
+            # `apps.by_window` a dict lookup on the very next line
+            holders = health.vram_apps()
+            self.game_vram = holders.get(commands.active_pid(), 0)
+            # asked here rather than inside _is_heavy_game, which runs on every
+            # frame: with the card full — its normal state while the model is
+            # resident — that was an HTTP request to ollama sixty times a second
+            self.ours = bool(chat.loaded())
+
         self.front_in -= dt
         if self.front_in <= 0:
             self.front_in = FRONT_POLL
             self.front = apps.by_window(*commands.active_window())
+            # time is counted from what is *in front*, not from what is
+            # running: Minecraft minimised for two hours is not two hours of
+            # playing, and away time is not screen time either
+            self.time.tick("" if self.away else (self.front.key if self.front
+                                                 else ""), FRONT_POLL)
+            self._check_break()
+
+        # A game in front wants the video memory the model is holding — but the
+        # question has to stay answered for a while before anything happens.
+        # One instantaneous sample decided it before, and one of its inputs is
+        # racy: while ollama loads a model the memory is already taken and
+        # /api/ps does not list it yet, so for a moment the card looks full and
+        # not ours. The cat announced it was short of resources and woke up
+        # again half a second later, which is exactly what it looked like.
+        if config.get("game_pause_enabled"):
+            if self._is_heavy_game():
+                self.heavy_for, self.light_for = self.heavy_for + dt, 0.0
+            else:
+                self.heavy_for, self.light_for = 0.0, self.light_for + dt
+            if self.heavy_for >= GAME_CONFIRM and not self._game_paused:
+                self._enter_game_pause()
+            elif self.light_for >= GAME_CONFIRM and self._game_paused:
+                self._leave_game_pause()
+        # the frame loop keeps running: the cat is a sprite and costs nothing,
+        # and freezing it made the desktop look broken rather than quiet
+
+        self.remind_in -= dt
+        if self.remind_in <= 0:
+            self.remind_in = REMIND_POLL
+            self._check_reminders(time.time())
+            self._check_cards(now)
+
+        self.beat_in -= dt
+        if self.beat_in <= 0:
+            self.beat_in = 60.0
+            health.beat()           # "кот жив" — из этого считается off_gap
+
+        self.study_scan_in -= dt
+        if self.study_scan_in <= 0:
+            self.study_scan_in = STUDY_SCAN
+            self._check_study(now)
 
         self.claude_in -= dt
         if self.claude_in <= 0:
@@ -435,9 +667,18 @@ class Cat(Gtk.Window):
                 if gap <= step or gap < 1e-6:
                     self.x, self.y = tx, ty
                     self.target, self.speed = None, 0.0
-                    # vanishing-act runs take precedence over idle
                     ph = getattr(self, "_vanish_phase", None)
-                    if ph == "to_corner":
+                    if self.napping:
+                        # first, ahead of the vanishing act: a nap that ended
+                        # in disappearing looked like the cat had crashed
+                        # `sleep`, not `sleep_small`: the latter is the basket
+                        # pose and carries a pose_small overlay with scale -0.4,
+                        # which shrinks the cat to 0.6 of its height the instant
+                        # it lies down. The plain state is the same curled-up
+                        # sleep — head down, tail round, eyes shut — at full size
+                        self.anim.set_state("sleep")
+                        self.plan_in = math.inf
+                    elif ph == "to_corner":
                         self._vanish_at_corner()
                     elif ph == "returning":
                         self._vanish_origin = None
@@ -491,6 +732,7 @@ class Cat(Gtk.Window):
             self.said = ""
 
         self.pose = self.anim.update(dt)
+        self._reshape_for_pose(dt)
         render.apply_gaze(self.skin, self.pose, self.gaze[0], -self.gaze[1])
 
         self.move(int(self.x - self.origin[0]), int(self.y - self.origin[1]))
@@ -565,6 +807,9 @@ class Cat(Gtk.Window):
         setup = Gtk.MenuItem(label="Настройки…")
         setup.connect("activate", lambda *_: self._settings_window())
         menu.append(setup)
+        free_vram = Gtk.MenuItem(label="Освободить видеопамять")
+        free_vram.connect("activate", lambda *_: self._free_vram())
+        menu.append(free_vram)
         machines = Gtk.MenuItem(label="Машины")
         machines.connect("activate", lambda *_: self._show_machines())
         menu.append(machines)
@@ -572,10 +817,14 @@ class Cat(Gtk.Window):
         diary.connect("activate", lambda *_: Gtk.show_uri_on_window(
             None, f"file://{memory.JOURNAL}", Gdk.CURRENT_TIME))
         menu.append(diary)
-        cards = Gtk.MenuItem(label="Открыть картотеку")
-        cards.connect("activate", lambda *_: Gtk.show_uri_on_window(
+        facts = Gtk.MenuItem(label="Открыть картотеку")
+        facts.connect("activate", lambda *_: Gtk.show_uri_on_window(
             None, f"file://{knowledge.KNOWLEDGE}", Gdk.CURRENT_TIME))
-        menu.append(cards)
+        menu.append(facts)
+        _total, ready, _learned = cards.stats()
+        deck = Gtk.MenuItem(label="Карточки…" + (f"  ({ready})" if ready else ""))
+        deck.connect("activate", lambda *_: study.open_window(self))
+        menu.append(deck)
         nap = Gtk.MenuItem(label="В лежанку")
         nap.set_sensitive(self.bed.present)
         nap.connect("activate", lambda *_: self.go_to_bed())
@@ -593,6 +842,23 @@ class Cat(Gtk.Window):
             return
         self._prefs = prefs.Window(self)
         self._prefs.connect("destroy", lambda *_: setattr(self, "_prefs", None))
+
+    def _free_vram(self):
+        """Drop every model ollama holds, right now.
+
+        For the moment a game is already running and stuttering: waiting for
+        the cat to notice is not what is wanted then.
+        """
+        used_before, total = health.vram()
+        gone = chat.unload()
+        used, _ = health.vram()
+        if not gone:
+            self.say("в видеопамяти и так пусто")
+            return
+        freed = max(0, used_before - used)
+        self.say(f"выгрузил {len(gone)}: свободно "
+                 f"{(total - used) / 1024:.1f} из {total / 1024:.0f} ГБ"
+                 + (f" (+{freed / 1024:.1f})" if freed else ""), secs=10)
 
     def _show_machines(self):
         """Whatever the last poll saw, straight in the balloon — no model.
@@ -641,6 +907,15 @@ class Cat(Gtk.Window):
             self._start_voice()
         else:
             self._stop_voice()
+        # the typed buffer follows its switch without a restart
+        if config.get("watch_typing") and self.typed is None:
+            t = typed.Typed()
+            if not t.error:
+                t.start()
+                self.typed = t
+        elif not config.get("watch_typing") and self.typed is not None:
+            self.typed.stop()
+            self.typed = None
         chosen = config.get("model")
         if chosen and chosen != self.model:
             self.model, self.history = chosen, []   # a new model inherits no mood
@@ -679,8 +954,12 @@ class Cat(Gtk.Window):
     def _vanish_due(self):
         """The booked moment arrived — vanish, unless life got in the way."""
         self._vanish_next_timer = None
-        if (not config.get("vanish_enabled") or self.in_bed
-                or self.prompting or self._vanish_pending):
+        # `napping` belongs here and not only in the cancel: the booking is made
+        # from five different places, and a cat that went to sleep to hand over
+        # video memory must not get up again and perform a disappearing act —
+        # which is exactly what it did, at the corner, minutes after curling up
+        if (not config.get("vanish_enabled") or self.in_bed or self.napping
+                or self._game_paused or self.prompting or self._vanish_pending):
             self._schedule_next_vanish()     # try again after another interval
             return False
         if not self._trigger_vanish():
@@ -700,6 +979,8 @@ class Cat(Gtk.Window):
         if not manual and not config.get("vanish_enabled"):
             return False
         # nearest roam corner by feet position
+        if self.napping or self._game_paused:
+            return False        # asleep for a reason; tricks can wait
         x0, y0, x1, y1 = self.roam
         corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
         cx, cy = min(corners, key=lambda p: math.hypot(p[0] - self.x, p[1] - self.y))
@@ -802,6 +1083,100 @@ class Cat(Gtk.Window):
         self._vanish_pending = False
         self._vanish_phase = None
         return was
+
+    def _is_heavy_game(self) -> bool:
+        """Does the thing in front need the video memory the model is sitting in?
+
+        This used to ask the processor, and the processor is the wrong witness:
+        Minecraft runs at 50% CPU quite happily, and what actually breaks is
+        shaders having nowhere to live because eleven gigabytes of language
+        model are resident. So the question is simply whether a game is in
+        front — if it is, the memory is not ours to hold.
+
+        Two earlier tests are gone because neither could ever fire: one asked
+        `self.get_window()` whether it was fullscreen, but that is the cat's own
+        DOCK window and never is; the other read `self.front.fullscreen`, and
+        apps.App has no such field, so `getattr(..., False)` answered for it.
+        """
+        if not config.get("game_pause_enabled"):
+            return False
+        used, total = self.vram
+        if self.playing():
+            # Not "a game is running" — *this* game wanting the card. Plain
+            # Minecraft draws in about a gigabyte and leaves plenty over; the
+            # same Minecraft with shaders wants several, and that is the case
+            # the cat has to step out of. Measured while both were on screen:
+            # java 1064 MiB, ollama 8300 MiB, nobody short of anything — and
+            # the cat sat mute through the whole session for no reason.
+            return self.game_vram >= GAME_HUNGRY
+        # nothing in front that we recognise, but the card is full anyway —
+        # and not by us, so something else is asking for it
+        return bool(total) and (total - used) < VRAM_FLOOR and not self.ours
+
+    def _enter_game_pause(self):
+        """Give the game its video memory back.
+
+        The cat itself stays on screen and keeps walking: a sprite costs
+        nothing, and hiding it saved nothing worth having. What is given up is
+        the model — unloaded from ollama outright — and with it the ability to
+        say anything until the game is closed.
+        """
+        if self._game_paused:
+            return
+        self._game_paused = True
+        # the line first, the unloading second: composing it would need the
+        # very memory being handed over, so it is fixed text typed out by hand
+        self.type_out(NAP_LINE)
+        # ...and the unloading itself on a thread. It is an HTTP call per model
+        # with a thirty-second timeout, and on the GTK thread that is thirty
+        # seconds of frozen desktop at the exact moment a game is starting.
+        where = self.front.name if self.front else "игра"
+        threading.Thread(target=self._unload_models, args=(where,),
+                         daemon=True).start()
+        self.napping = True
+        # a vanishing act already under way would fire on arrival at the corner
+        # and hide the cat instead of letting it sleep there
+        self._cancel_vanish()
+        self._go_to_corner()
+
+    def _leave_game_pause(self):
+        """The game is gone; nothing to restore but the right to talk.
+
+        The model is not reloaded here on purpose — the next thing the cat
+        actually wants to say will pull it back in, and doing it eagerly would
+        spend fifteen seconds of disk on a reply nobody asked for.
+        """
+        if not self._game_paused:
+            return
+        self._game_paused = False
+        self.napping = False
+        self.anim.set_state("idle")
+        self.anim.play_once("break_stretch")     # the same waking it does in bed
+        self.plan_in = 2.0
+        self.say("выспался", secs=5)
+        if config.get("vanish_enabled"):
+            self._schedule_next_vanish()         # cancelled when it went to sleep
+
+    def _unload_models(self, where: str):
+        """Runs on a thread: only the journal line comes back to the GTK side."""
+        freed = chat.unload()
+        if freed:
+            GLib.idle_add(memory.write, "уступил видеопамять",
+                          f"{where}: выгрузил {', '.join(freed)}")
+
+    def _go_to_corner(self):
+        """Off to the nearest corner, at a run.
+
+        Nearest and not random: the memory is wanted now, and a cat crossing
+        the whole desktop first is a cat still in the way. At running speed for
+        the same reason.
+        """
+        x0, y0, x1, y1 = self.roam
+        corners = [(x0, y0), (x1, y0), (x0, y1), (x1, y1)]
+        self.target = min(corners, key=lambda c: math.dist((self.x, self.y), c))
+        self.speed = RUN_SPEED * self.height_px / 120.0
+        self.anim.set_state("run")
+        self.plan_in = math.inf          # nothing else decides where it goes now
 
     def _equip_random_cosmetic(self):
         """Pick one random cosmetic from assets/cosmetics and remember it for 5 min."""
@@ -1066,6 +1441,44 @@ class Cat(Gtk.Window):
             memory.write("сжал неделю", f"{key}: {full.strip()[:200]}")
         return False
 
+    # -- how long this has been going on ----------------------------------
+    def _time_line(self, prompt: str) -> str:
+        """Сегодняшние часы — но только если о них спросили."""
+        if not TIME_WORDS.search(prompt or ""):
+            return ""
+        parts = [f"{apps.BY_KEY[k].name} — {screentime.spell(s)}"
+                 for k, s in self.time.top(3) if k in apps.BY_KEY and s >= 60]
+        return ", ".join(parts)
+
+    def _check_break(self):
+        """Пора отвлечься — после часа с лишним в одном и том же.
+
+        Measured on the unbroken run rather than the daily total: two hours
+        split across the day is a normal day, two hours without standing up is
+        the thing worth a word. Switching to something else already counts as
+        the break, so the counter resets itself and this stays quiet.
+        """
+        if not config.get("break_enabled") or self.in_bed or self.away:
+            return
+        after = float(config.get("break_after_min")) * 60.0
+        if after <= 0 or self.time.run < after:
+            self.nagged_at = min(self.nagged_at, self.time.run)
+            return
+        # said once per stretch, then not again until another full interval has
+        # gone by: a nag every four seconds is not a cat, it is a smoke alarm
+        if self.time.run - self.nagged_at < after:
+            return
+        self.nagged_at = self.time.run
+        app = apps.BY_KEY.get(self.time.current)
+        where = app.name if app else "за компьютером"
+        total = self.time.today(self.time.current)
+        extra = (f" Сегодня там уже {screentime.spell(total)}."
+                 if total > self.time.run * 1.4 else "")
+        self.ask(f"Хозяин {screentime.spell(self.time.run)} без перерыва "
+                 f"в «{where}».{extra} Позови его отвлечься — размяться, "
+                 f"попить воды. Одной фразой, по-кошачьи, без нотаций "
+                 f"и без списков.", spontaneous=False)
+
     # -- which programs are open -----------------------------------------
     def _check_apps(self, now):
         """Notice programs starting and stopping, and have an opinion.
@@ -1089,6 +1502,11 @@ class Cat(Gtk.Window):
             self.screen_due = 0.0        # a new program is worth a look
         if gone:
             self.break_now = True        # closing something is a natural pause
+        # two or more at once, or the last one left: this is a shutdown, not
+        # someone tidying up. Said before the machine goes, because afterwards
+        # there is nobody to say it to.
+        if (len(gone) >= 2 or (gone and not now_apps)) and self._cool("bye", 600):
+            self._farewell()
         if not self._cool("apps", APP_COOLDOWN):
             return
 
@@ -1196,6 +1614,97 @@ class Cat(Gtk.Window):
             spontaneous=False,
         )
 
+    # -- what the cat is quietly aware of --------------------------------
+    def _awareness(self):
+        """Фоновое, что кот знает и без вопроса — сейчас только долгое отсутствие.
+
+        Набранное сюда больше не подмешивается: сырые обрывки того, что хозяин
+        печатал в терминал и в код, склеенные в каждую реплику, и были той самой
+        «фигнёй» — кот пересказывал мусор. Буфер по-прежнему помогает зрению
+        разобрать слово на экране (см. _study_glance), но во рту у кота ему
+        делать нечего.
+        """
+        # свежо только первые десять минут: через полчаса «ты вернулся» — ложь
+        if self.off_gap > 900 and time.monotonic() - self.boot_mono < 600:
+            return (f"\n\nКомпьютер простоял выключенным "
+                    f"{screentime.spell(self.off_gap)} — хозяин только что "
+                    f"вернулся за него. Учти это, только если к месту.")
+        return ""
+
+    # -- learning English ------------------------------------------------
+    def _study_hint(self) -> bool:
+        """Дешёвый признак, что учат английский — по вкладкам и окну, без модели."""
+        hay = " ".join(t.title.lower() for t in self.tabs)
+        hay += " " + " ".join(t.domain for t in self.tabs)
+        hay += " " + commands.active_window()[1].lower()
+        return any(k in hay for k in STUDY_HINTS)
+
+    def _check_study(self, now):
+        """Заметить учёбу дёшево, подтвердить снимком, потом снимать раз в минуту."""
+        if not config.get("study_watch") or not (self.watch_screen and self.model_vision):
+            return
+        if self.in_bed or self.away or self.streaming or self._vanish_pending:
+            return
+        if self.target is not None or self.machine_busy():
+            return                      # занят ходьбой или машина под нагрузкой
+        if now < self.study_until:
+            # режим включён: держим минутный такт, каждый снимок продлевает его
+            if now - self.study_at >= STUDY_EVERY:
+                self._study_glance(now)
+            return
+        # режима нет — ищем повод посмотреть, но не чаще, чем раз в STUDY_CONFIRM
+        if now - self.study_at < STUDY_CONFIRM:
+            return
+        if self._study_hint():
+            self._study_glance(now)
+
+    def _study_glance(self, now):
+        vision = config.get("vision_model") or self.model_vision
+        shot = self._grab_screen()
+        if not shot:
+            return
+        self.study_at = now
+        prompt = STUDY_PROMPT
+        if self.typed:
+            recent = self.typed.recent(seconds=120)
+            if recent:
+                prompt += f"\nПодсказка — хозяин недавно печатал: {recent[-160:]}"
+        chat.stream(
+            vision,
+            [{"role": "user", "content": prompt, "images": [shot]}],
+            lambda _c: None,
+            lambda full, err: GLib.idle_add(self._studied, full, err),
+            options={"temperature": 0.2, "num_predict": 160},
+        )
+
+    def _studied(self, full, err):
+        if err or not full:
+            return False
+        lines = full.strip().splitlines()
+        studying = bool(lines) and lines[0].strip().upper().startswith(("YES", "ДА"))
+        pairs = parse_pairs("\n".join(lines[1:]))
+        if studying:
+            self.study_until = time.monotonic() + STUDY_WINDOW
+        if not (studying or time.monotonic() < self.study_until):
+            return False            # не учёба — снимок ничего не добавляет
+        added = []
+        if config.get("study_cards"):
+            # at most one word per glance — the headword being looked up. Reading
+            # the whole breakdown of "hope" turned one lookup into eight cards:
+            # hopeful, hopeless, "I hope he'll come.", an example sentence…
+            good = [(f, b) for f, b in pairs if cards.good_pair(f, b)]
+            if good:
+                front, back = good[0]
+                if cards.add(front, back, topic="английский"):
+                    added.append(front)
+        if added:
+            memory.write("карточки", f"с экрана: {', '.join(added)[:200]}")
+            shown = ", ".join(added[:4])
+            self.ask(f"Хозяин учит английский, и ты подсмотрел на экране новые "
+                     f"слова с переводом — уже закинул их в колоду: {shown}. "
+                     f"Скажи об этом коротко и по-кошачьи.", spontaneous=False)
+        return False
+
     # -- glancing at the screen ------------------------------------------
     def _grab_screen(self):
         """Base64 JPEG of the desktop. Held in memory only — never written out."""
@@ -1220,6 +1729,8 @@ class Cat(Gtk.Window):
         if not self.watch_screen or self.in_bed or self.streaming \
                 or self._vanish_pending:
             return
+        if now < self.study_until:
+            return              # study mode is already looking, every minute
         if self.target is not None or self.anim.state == "sleep":
             return                              # busy walking, or asleep
         # half again as often while playing: most to look at, least to read
@@ -1354,14 +1865,24 @@ class Cat(Gtk.Window):
                 return found
         return ""
 
+    def talking(self) -> bool:
+        """Is a phrase being delivered right now — streamed or typed out?
+
+        Not "is there something in the balloon": once a line has finished, a
+        new one may replace it. What must not happen is a phrase being cut off
+        halfway through by another one.
+        """
+        return bool(self.streaming or self.type_timer)
+
     def say(self, text, secs=BUBBLE_LINGER):
         """Put a fixed line in the balloon; no model involved.
 
         Silent while a question is open: the balloon *is* the input field then,
         and painting over it wipes the question and whatever has been typed
         into it so far, without stopping the keystrokes from still arriving.
+        Silent, too, while another phrase is still being said.
         """
-        if self.prompting:
+        if self.prompting or self.talking():
             return
         self._stop_typing()
         self.said, self.streaming = text, False
@@ -1387,8 +1908,8 @@ class Cat(Gtk.Window):
         because a canned sentence appearing instantly reads as a dialog box,
         and the same sentence typed out reads as the cat saying it.
         """
-        if self.prompting:
-            return                               # a question is already open
+        if self.prompting or self.talking():
+            return                   # a question is open, or something is being said
         self._stop_typing()
         self.said, self.streaming = "", True     # streaming gives the caret
         self.bubble_until = math.inf             # ...and stops the timeout
@@ -1429,9 +1950,22 @@ class Cat(Gtk.Window):
             # callback forever, and the owner would be typing into whichever
             # of them happened to win
             return
+        if self.talking():
+            # wait rather than drop: unlike a remark, a question has a callback
+            # behind it — the Telegram login stalls forever if it never fires
+            def retry():
+                self.prompt(question, on_answer, secret)
+                return False
+
+            GLib.timeout_add(400, retry)
+            return
+
         def begin():
             self.prompting = {"q": question, "buf": "", "secret": secret,
                               "cb": on_answer}
+            if self.typed:
+                self.typed.active = False   # a code or password typed here is
+                                            # not something to remember
             seat = Gdk.Display.get_default().get_default_seat()
             seat.grab(self.get_window(), Gdk.SeatCapabilities.KEYBOARD,
                       False, None, None, None, None)
@@ -1459,6 +1993,8 @@ class Cat(Gtk.Window):
             Gdk.Display.get_default().get_default_seat().ungrab()
         except Exception:
             pass
+        if self.typed:
+            self.typed.active = True
         self.streaming = False
         self.bubble_until = time.monotonic() + BUBBLE_LINGER
         self.plan_in = 2.0
@@ -1509,12 +2045,7 @@ class Cat(Gtk.Window):
         return self.cpu_busy > (PLAY_CEILING if self.playing() else CPU_CEILING)
 
     def ask(self, prompt, spontaneous=True, from_owner=False):
-        """smart=True routes to the better quantisation — used for code.
-
-        The good model is pinned to the CPU, where evaluating even a short
-        prompt costs seconds. That is invisible for background work but awful
-        when someone is watching the balloon, so anything interactive goes to
-        the fast model regardless.
+        """One model for everything, so there is nothing here to route between.
 
         spontaneous replies are dropped when the machine is busy; something the
         owner actually typed is never silently swallowed.
@@ -1528,12 +2059,21 @@ class Cat(Gtk.Window):
             return
         if self._vanish_pending:
             return      # the balloon is unmapped with the window; talk later
+        if self._game_paused:
+            # speaking means loading the model, which is exactly the memory the
+            # game is short of. Silence here is the whole point of the pause.
+            return
         now = time.monotonic()
         if spontaneous:
             if self.machine_busy() or self.away:
                 return      # nobody is here to hear it, and the deep pass needs the cores
             if now < self.quiet_until:
                 return      # something else just spoke; one thought at a time
+        if self.talking() and not from_owner:
+            # a phrase already being said is not interrupted by another one.
+            # Only the owner speaking to the cat outranks whatever it is
+            # halfway through — they are waiting for an answer.
+            return
         # important lines silence the chatter behind them too, not just each other
         self.quiet_until = now + self.gap
         if from_owner:
@@ -1554,18 +2094,38 @@ class Cat(Gtk.Window):
         # said anything at all.
         known = knowledge.recall(prompt, limit=3)
         turn_text = prompt
+        spent = self._time_line(prompt)
+        if spent:
+            # only when asked. The cat knows this all day, but pasting it into
+            # every prompt would have it announcing the tally unprompted
+            turn_text += f"\n\nСколько времени сегодня ушло: {spent}"
         if known:
             # dated, so it can say "ты это на прошлой неделе говорил" instead
             # of repeating it back as if it were news
             turn_text += ("\n\nТы помнишь про хозяина:\n" + known
                           + "\nУпомяни это, только если оно к месту.")
+        if spontaneous and not from_owner:
+            turn_text += self._awareness()
         turn_text += chat.flavour(self.rng)
-        # the history keeps the plain prompt: the mood was for this reply only,
-        # and carrying old moods forward would make every turn contradict itself
-        self.history = self.history[-6:] + [{"role": "user", "content": prompt}]
         msgs = ([{"role": "system", "content": chat.system_prompt()}]
-                + self.history[:-1]
+                + self.history[-6:]
                 + [{"role": "user", "content": turn_text}])
+        # Only what the owner actually said stays in the history. Everything
+        # else here is an instruction to the cat — "Пора: «созвон». Скажи ему
+        # об этом" — and leaving those in made the cat read its own cue as part
+        # of the conversation and come back to it for the next six turns. One
+        # reminder, five mentions of a call that had already happened.
+        #
+        # The mood is dropped for the same reason it was never in the system
+        # prompt: it was for this reply only.
+        self.history = self.history[-6:]
+        if from_owner:
+            self.history.append({"role": "user", "content": prompt})
+        # remembered on the turn so _finished knows whether the reply belongs in
+        # the dialogue. Spontaneous remarks are fire-and-forget: keeping their
+        # replies made history a pile of the cat's own asides with no prompts
+        # behind them, and the model started echoing that noise back — the "rot"
+        self._owner_turn = from_owner
         self.said, self.streaming = "", True
         self.target, self.speed = None, 0.0
         self.plan_in = math.inf          # do not wander off mid-sentence
@@ -1605,9 +2165,12 @@ class Cat(Gtk.Window):
             # the *untrimmed* text — chat.tidy may have rolled a truncated
             # reply back to the last finished sentence, so show that instead
             self.said = full
-            self.history.append({"role": "assistant", "content": full})
-            if config.get("remember_session"):
-                memory.save_session(self.history, time.time())
+            # only a real exchange with the owner is worth remembering; a
+            # spontaneous aside is said once and forgotten, or history rots
+            if getattr(self, "_owner_turn", False):
+                self.history.append({"role": "assistant", "content": full})
+                if config.get("remember_session"):
+                    memory.save_session(self.history, time.time())
         self.bubble_until = time.monotonic() + BUBBLE_LINGER
         self.plan_in = 2.0
         return False
@@ -1626,11 +2189,8 @@ class Cat(Gtk.Window):
         def send(*_):
             text = entry.get_text().strip()
             w.destroy()
-            if not text:
-                return
-            if self._telegram_command(text):
-                return          # "ответь лонеру что…" is an errand, not a remark
-            self.ask(text, spontaneous=False, from_owner=True)
+            if text:
+                self.heard(text)
 
         entry.connect("activate", send)
         w.connect("key-press-event",
@@ -1638,7 +2198,224 @@ class Cat(Gtk.Window):
         w.add(entry)
         w.show_all()
         w.present()
-        return w, entry
+        # no return value: listen.py hands this to GLib.idle_add, which re-runs
+        # a callback for as long as it returns something truthy — a tuple here
+        # meant one F1 tap opened windows forever and froze the whole session
+
+    # -- meeting for the first time ----------------------------------------
+    def _meet(self):
+        """Три вопроса при первом запуске, в пузыре, а не в форме.
+
+        The settings window has had a name field all along and nobody ever
+        filled it in, so the cat spent its first week calling everyone
+        «Хозяин» and guessing the gender wrong in every past-tense verb. Asked
+        aloud by the cat itself, in the same balloon it uses for a Telegram
+        code, it is a introduction rather than a form — and the third answer
+        goes into the картотека, where it becomes something to remember rather
+        than a setting nobody looks at again.
+        """
+        if self.in_bed:
+            GLib.timeout_add_seconds(int(MEET_DELAY), self._meet)
+            return False        # asleep in the bed: ask when it gets up
+        self.prompt("мяу! я мяумори. как тебя звать?", self._met_name)
+        return False
+
+    def _met_name(self, name):
+        if name:
+            config.save({"owner": name.strip()[:40]})
+        self.prompt("а ты «пришёл» или «пришла»?", self._met_gender)
+
+    def _met_gender(self, answer):
+        # anything with the feminine ending counts; anything else stays the
+        # default rather than becoming a third state the prompt cannot express
+        if answer and "шла" in answer.lower():
+            config.save({"owner_gender": "женский"})
+        self.prompt("расскажи о себе — чем занят, что любишь?", self._met_about)
+
+    def _met_about(self, about):
+        config.save({"greeted": True})
+        self.history.clear()        # the introduction starts the conversation
+        if about and about.strip():
+            knowledge.add("хозяин", about.strip()[:400])
+            memory.write("хозяин рассказал о себе", about.strip()[:400])
+            self.ask(f"Хозяин только что представился и сказал о себе: "
+                     f"«{about.strip()[:200]}». Поздоровайся и скажи что-нибудь "
+                     f"на это — коротко, по-кошачьи.", spontaneous=False)
+        else:
+            self.say("ну и ладно, сам всё разузнаю", secs=8)
+
+    def heard(self, text: str) -> None:
+        """Everything the owner says, whichever way they said it.
+
+        Typed and spoken input used to arrive at different doors: the little
+        text window checked for errands and notes first, while anything spoken
+        went straight to the model. So "в 15 часов выпить таблетку" typed became
+        a reminder and the same sentence said out loud became small talk — the
+        one case where the difference actually costs you something.
+        """
+        text = (text or "").strip()
+        if not text:
+            return
+        for handled in (self._telegram_command,    # "ответь лонеру что…"
+                        self._reminder_command,    # "в 15 часов выпить таблетку"
+                        self._deck_command,        # "создай карточки с глаголами"
+                        self._card_command):       # "запомни слово brittle"
+            if handled(text):
+                return
+        self.ask(text, spontaneous=False, from_owner=True)
+
+    # -- word cards ---------------------------------------------------------
+    def _deck_command(self, text) -> bool:
+        """«создай карточки с неправильными глаголами» — набор, а не одно слово.
+
+        Тему кот не выдумывает и не сокращает: что попросили, то и уходит в
+        промпт. Разбирается ответ строками «english | перевод», потому что
+        просить у модели JSON на процессоре — это лишние скобки, на которых она
+        и спотыкается.
+        """
+        m = DECK_RE.match(" ".join(text.split()))
+        if not m:
+            return False
+        topic = m.group("topic").strip(" .!?«»\"")
+        if not topic or len(topic) > 80:
+            return False
+        self.say(f"сажусь за карточки: {topic}…", secs=45)
+
+        def finished(full, err):
+            GLib.idle_add(self._deck_ready, topic, full or "", err)
+
+        chat.stream(self.model,
+                    [{"role": "user",
+                      "content": DECK_PROMPT.format(n=DECK_SIZE, topic=topic)}],
+                    lambda _c: None, finished,
+                    # a list is not a remark: the reply budget for one cat
+                    # sentence would cut it off after four words
+                    options={"temperature": 0.3, "num_predict": 700})
+        return True
+
+    def _check_cards(self, now):
+        """Позвать повторить — но как кот, а не как будильник.
+
+        Тишина здесь важнее напоминания: карточки, о которых спрашивают каждый
+        час, перестают быть хобби и становятся долгом. Поэтому раз в день, и
+        только когда хозяин на месте, ничем не занят вплотную и никто ничего
+        не говорил последнюю минуту.
+        """
+        if self.in_bed or self.away or self.napping or self.prompting:
+            return
+        if now < self.quiet_until or not self._cool("cards", CARDS_COOLDOWN):
+            return
+        _total, ready, learned = cards.stats()
+        if ready < CARDS_NUDGE:
+            return
+        self.ask(f"У хозяина накопилось {ready} карточек со словами на "
+                 f"повторение, выучено уже {learned}. Он учит английский. "
+                 f"Позови его позаниматься — коротко, по-кошачьи, "
+                 f"без нотаций и без списков.", spontaneous=True)
+
+    def cards_done(self, count):
+        """Сессия закончилась — сказать что-нибудь про неё. Зовёт study.py."""
+        if count <= 0:
+            return
+        _total, _ready, learned = cards.stats()
+        memory.write("карточки", f"повторил {count} слов за раз")
+        self.ask(f"Хозяин только что повторил {count} английских слов подряд. "
+                 f"Всего выучено {learned}. Похвали его — коротко, по-кошачьи, "
+                 f"без пафоса и без советов.", spontaneous=False)
+
+    def _deck_ready(self, topic, full, err):
+        if err:
+            self.say(f"не вышло: {err[:60]}", secs=8)
+            return False
+        pairs = parse_pairs(full)
+        if not pairs:
+            self.say("модель выдала непонятное, попробуй сказать иначе", secs=10)
+            return False
+        fresh, known = cards.add_many(pairs, topic=topic)
+        memory.write("карточки", f"набор «{topic}»: {fresh} новых слов")
+        was = f", {known} уже были" if known else ""
+        self.say(f"готово: {fresh} карточек про {topic}{was}", secs=10)
+        return False
+
+    def _card_command(self, text) -> bool:
+        """«запомни слово brittle» — в колоду, а не в разговор.
+
+        A regex, like the reminders and the Telegram errands: asking a model
+        whether a sentence was a request costs seconds on the CPU, and the
+        shape here is fixed enough that it never needed one.
+        """
+        m = CARD_RE.match(" ".join(text.split()))
+        if not m:
+            return False
+        word, meaning = m.group("word").strip(" -—:"), (m.group("back") or "").strip()
+        if not word or len(word) > CARD_MAX:
+            return False
+        if meaning:
+            self.say(f"записал: {word} — {meaning}" if cards.add(word, meaning)
+                     else f"«{word}» уже в колоде", secs=7)
+            return True
+        self.say(f"{word}… сейчас переведу", secs=20)
+
+        def finished(full, err):
+            back = "" if err else (full or "").strip().strip('"«».')
+            GLib.idle_add(self._card_ready, word, back)
+
+        chat.stream(self.model, [{"role": "user", "content": study.ASK_BACK + word}],
+                    lambda _c: None, finished,
+                    options={"temperature": 0.1, "num_predict": 24})
+        return True
+
+    def _card_ready(self, word, back):
+        if not cards.add(word, back):
+            self.say(f"«{word}» уже в колоде", secs=6)
+        elif back:
+            self.say(f"запомнил: {word} — {back}", secs=8)
+        else:
+            self.say(f"записал {word}, перевод впиши сам", secs=8)
+        return False
+
+    # -- notes and reminders -----------------------------------------------
+    def _reminder_command(self, text) -> bool:
+        """«в 15 часов мне нужно выпить таблетку» — записать, а не обсуждать.
+
+        Returns True when the line was a note and has been taken down, so the
+        caller knows not to hand it to the model as conversation.
+        """
+        note = remind.parse(text)
+        if note is None:
+            return False
+        remind.add(note)
+        memory.write("напоминание", f"{note.when():%d.%m %H:%M} — {note.text}")
+        self.say(f"запомнил: {note.text}, {remind.spell_left(note.left(time.time()))}",
+                 secs=8)
+        return True
+
+    def _check_reminders(self, now_wall: float):
+        """Twice for each: five minutes ahead, and on the dot."""
+        fired, warn = remind.due(now_wall)
+        for note in warn:
+            self.ask(f"Хозяин просил напомнить: «{note.text}». До этого "
+                     f"{remind.spell_left(note.left(now_wall))}. Скажи ему "
+                     f"коротко, что скоро пора.", spontaneous=False)
+        for note in fired:
+            self.ask(f"Пора: «{note.text}». Хозяин просил напомнить именно "
+                     f"сейчас. Скажи ему об этом одной фразой.",
+                     spontaneous=False)
+
+    def _farewell(self):
+        """Everything closing at once means the machine is about to go off.
+
+        Whatever is due in the next hour has to be said now: in five minutes
+        there will be nobody here to say it to.
+        """
+        soon = remind.upcoming(time.time())
+        if not soon:
+            return
+        lines = "; ".join(f"{n.text} ({remind.spell_left(n.left(time.time()))})"
+                          for n in soon[:3])
+        self.ask(f"Похоже, хозяин выключает компьютер. У него на ближайший час "
+                 f"назначено: {lines}. Напомни ему об этом, пока он не ушёл.",
+                 spontaneous=False)
 
     # -- running an errand in Telegram -------------------------------------
     def _telegram_command(self, text) -> bool:
@@ -1855,3 +2632,6 @@ def main():
         cat.bed.close()
         cat.notes.stop()          # otherwise dbus-monitor outlives the cat
         cat._stop_voice()         # ...and so would the keyboard listener
+        if cat.typed:
+            cat.typed.stop()      # another global listener to unhook
+        cat.time.save()           # the last minutes of the day are worth keeping

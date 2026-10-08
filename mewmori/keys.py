@@ -10,8 +10,6 @@ this module reports why and the cat runs with no hotkeys.
 """
 from __future__ import annotations
 
-import threading
-
 PRESETS = {
     "name:alt_r": "Правый Alt", "name:alt": "Левый Alt",
     "name:ctrl_r": "Правый Ctrl", "name:ctrl": "Левый Ctrl",

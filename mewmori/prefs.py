@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 from pathlib import Path
 
 import gi
@@ -20,6 +21,8 @@ from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 from . import chat, config, ears, health, keys, knowledge, telegram, voice  # noqa: E402
 
 # (key, label, hint) for the plain on/off half of the form
+MIC_TEST = 3.0          # s the microphone check records for
+
 WATCHES = (
     ("watch_screen", "Смотреть на экран",
      "Раз в 7–18 минут кот делает снимок экрана и смотрит, чем ты занят. "
@@ -37,6 +40,16 @@ WATCHES = (
     ("watch_hardware", "Следить за железом",
      "Диск, память, нагрузка — здесь и на машинах из hosts.json."),
     ("watch_music", "Слушать музыку", "Комментирует то, что играет в Spotify."),
+    ("watch_typing", "Помнить набранное",
+     "Держит в памяти последние 5 минут того, что ты печатал, как фон для "
+     "реплик. Никуда не пишется, выключается, пока кот сам ждёт код или пароль. "
+     "Пароли из обычных полей отсеиваются грубо — гарантии нет."),
+    ("study_watch", "Замечать учёбу английского",
+     "Увидев по вкладкам или экрану, что ты учишь английский, кот смотрит на "
+     "экран чаще — раз в минуту, пока это длится."),
+    ("study_cards", "Слова с экрана — в колоду",
+     "Если на экране английское слово с переводом (например ты спросил его у "
+     "ассистента), кот сам заводит карточку в наборе «английский»."),
     ("watch_telegram", "Доступ к телеграму",
      "Кот сможет читать диалоги и отправлять сообщения от твоего имени. "
      "Вход — ниже, в разделе «Телеграм»."),
@@ -134,10 +147,35 @@ class Window(Gtk.Window):
                                  "Удалит все факты, где встречается эта "
                                  "строка. Совсем, из файлов."), False, False, 0)
 
+        tidy = Gtk.Button(label="Прибраться")
+        tidy.connect("clicked", self._tidy)
+        box.pack_start(self._row(
+            "Слить дубли", tidy,
+            "Ночной разбор называет одно и то же разными словами: «инструмент» "
+            "и «инструменты» становятся двумя темами с одним фактом на двоих. "
+            "Кнопка сводит такие темы вместе и выбрасывает пересказы — "
+            "остаётся то, что сказано раньше."), False, False, 0)
+
         open_cards = Gtk.Button(label="Открыть папку")
         open_cards.connect("clicked", lambda *_: Gtk.show_uri_on_window(
             None, f"file://{knowledge.KNOWLEDGE}", Gdk.CURRENT_TIME))
         box.pack_start(self._row("", open_cards), False, False, 0)
+
+        box.pack_start(self._heading("Перерывы"), False, False, 0)
+        self.break_on = Gtk.Switch(active=bool(config.get("break_enabled")))
+        self.break_on.set_halign(Gtk.Align.END)
+        self.break_on.connect("notify::active", self._break_toggled)
+        box.pack_start(self._row(
+            "Звать отвлечься", self.break_on,
+            "Считается время в одной программе подряд, а не за день: "
+            "переключился на другое — счётчик сбросился, это и был перерыв."),
+            False, False, 0)
+
+        self.break_after = Gtk.SpinButton.new_with_range(20, 300, 10)
+        self.break_after.set_value(float(config.get("break_after_min")))
+        self.break_after.connect("value-changed", self._break_changed)
+        box.pack_start(self._row("Через сколько минут", self.break_after),
+                       False, False, 0)
 
         box.pack_start(self._heading("Модель"), False, False, 0)
         combo = Gtk.ComboBoxText()
@@ -161,6 +199,29 @@ class Window(Gtk.Window):
             "Звук печати", self.type_sound,
             "Тихий щелчок на каждое слово, пока кот печатает. Выключи, "
             "если он мешает."), False, False, 0)
+
+        box.pack_start(self._heading("Игры: авто-пауза"), False, False, 0)
+        self.game_pause = Gtk.Switch(active=bool(config.get("game_pause_enabled")))
+        self.game_pause.set_halign(Gtk.Align.END)
+        self.game_pause.connect("notify::active", self._game_pause_toggled)
+        box.pack_start(self._row(
+            "Пауза когда игра нагружает систему", self.game_pause,
+            "Кот прячется и ставит на паузу зрение, вкладки, клода и опросы железа когда впереди игра или CPU > порога. "
+            "Освобождает ~60-120 МБ и перестаёт дергать диск/сеть."), False, False, 0)
+
+        self.game_cpu = Gtk.SpinButton.new_with_range(40, 95, 5)
+        self.game_cpu.set_value(float(config.get("game_pause_cpu") or 60.0))
+        self.game_cpu.connect("value-changed", self._game_cpu_changed)
+        box.pack_start(self._row(
+            "Порог CPU для паузы, %", self.game_cpu,
+            "При какой загрузке считать машину занятой игрой, если окно не fullscreen."), False, False, 0)
+
+        self.game_fs = Gtk.Switch(active=bool(config.get("game_pause_on_fullscreen")))
+        self.game_fs.set_halign(Gtk.Align.END)
+        self.game_fs.connect("notify::active", self._game_fs_toggled)
+        box.pack_start(self._row(
+            "Пауза на весь экран", self.game_fs,
+            "Считать любой fullscreen (игра/видео) поводом спрятаться, даже при низком CPU."), False, False, 0)
         stack_why = ears.available() or keys.available()
         self.voice_on = Gtk.Switch(active=bool(config.get("voice_enabled")))
         self.voice_on.set_halign(Gtk.Align.END)
@@ -172,6 +233,28 @@ class Window(Gtk.Window):
                           "туда, где курсор. Два быстрых нажатия подряд — кот "
                           "поправит раскладку и опечатки в поле.")),
             False, False, 0)
+
+        # Which microphone, explicitly. The system default here was an empty
+        # analog jack sitting next to a real USB microphone, and everything
+        # downstream — hotkeys, wake word, commands — looked broken instead.
+        self.mic = Gtk.ComboBoxText()
+        self.mic.append("", "системный по умолчанию")
+        for name, shown in ears.sources():
+            self.mic.append(name, shown)
+        self.mic.set_active_id(config.get("voice_source") or "")
+        self.mic.connect("changed", self._mic_changed)
+        self.mic.set_sensitive(not stack_why)
+        box.pack_start(self._row(
+            "Микрофон", self.mic,
+            "«По умолчанию» — тот, что выбран в системе, и это часто не тот, "
+            "в который ты говоришь."), False, False, 0)
+
+        self.mic_test = Gtk.Button(label="Проверить микрофон")
+        self.mic_test.connect("clicked", self._mic_check)
+        self.mic_test.set_sensitive(not stack_why)
+        box.pack_start(self._row("", self.mic_test), False, False, 0)
+        self.mic_result = Gtk.Label(xalign=0, wrap=True)
+        box.pack_start(self.mic_result, False, False, 0)
 
         self.dictate_key = Gtk.Button(label=keys.label(config.get("dictate_key")))
         self.dictate_key.connect("clicked", self._grab_key)
@@ -276,6 +359,18 @@ class Window(Gtk.Window):
         if switch.get_active():
             self.cat._type_blip()   # instant feedback: hear what you just turned on
 
+    def _game_pause_toggled(self, switch, _param):
+        config.save({"game_pause_enabled": switch.get_active()})
+        self.cat.apply_settings()
+
+    def _game_cpu_changed(self, spin):
+        config.save({"game_pause_cpu": float(spin.get_value())})
+        self.cat.apply_settings()
+
+    def _game_fs_toggled(self, switch, _param):
+        config.save({"game_pause_on_fullscreen": switch.get_active()})
+        self.cat.apply_settings()
+
     def _forget(self, _button):
         from . import memory
         memory.forget_session()
@@ -302,6 +397,20 @@ class Window(Gtk.Window):
         self._refresh_cards()
         self.cat.say(f"забыл {gone} записей про «{needle[:24]}»" if gone
                      else f"а я и не помнил про «{needle[:24]}»")
+
+    def _tidy(self, _button):
+        merged, dropped = knowledge.tidy()
+        self._refresh_cards()
+        self.cat.say(
+            f"прибрался: {merged} тем слил, {dropped} пересказов выбросил"
+            if merged or dropped else "а там и так порядок", secs=8)
+
+    def _break_toggled(self, switch, _param):
+        config.save({"break_enabled": switch.get_active()})
+
+    def _break_changed(self, spin):
+        config.save({"break_after_min": int(spin.get_value())})
+        self.cat.nagged_at = 0.0        # a new interval starts counting fresh
 
     # -- other machines, inline ---------------------------------------------
     def _machines(self):
@@ -604,6 +713,50 @@ class Window(Gtk.Window):
     def _voice_toggled(self, switch, _param):
         config.save({"voice_enabled": switch.get_active()})
         self.cat.apply_settings()
+
+    def _mic_changed(self, combo):
+        config.save({"voice_source": combo.get_active_id() or ""})
+        # the wake word holds its stream open for the life of the process, so
+        # a new microphone only reaches it by starting the ears again
+        self.cat._stop_voice()
+        self.cat.apply_settings()
+        self.mic_result.set_text("")
+
+    def _mic_check(self, button):
+        """Записать пару секунд и сказать, что слышно. На потоке — блокирует."""
+        button.set_sensitive(False)
+        self.mic_result.set_text("говори…")
+
+        def work():
+            import numpy as np
+            rec = ears.Recorder()
+            try:
+                rec.start()
+                time.sleep(MIC_TEST)
+                audio = rec.stop()
+            except Exception as e:
+                GLib.idle_add(done, f"микрофон не открылся: {str(e)[:70]}")
+                return
+            if audio.size == 0:
+                GLib.idle_add(done, "тишина — ни одного кадра")
+                return
+            peak = float(np.abs(audio).max())
+            heard = ""
+            if self.cat.ears is not None:
+                heard = self.cat.ears.ears.transcribe(audio, beam_size=1,
+                                                      language="ru")
+            level = "громко" if peak > 0.2 else "нормально" if peak > 0.03 \
+                else "очень тихо" if peak > 0.005 else "тишина"
+            GLib.idle_add(done, f"{level} (пик {peak:.2f})"
+                          + (f", услышал: «{heard[:60]}»" if heard
+                             else ", слов не разобрал"))
+
+        def done(text):
+            self.mic_result.set_text(text)
+            button.set_sensitive(True)
+            return False
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _words_changed(self, entry):
         words = [w.strip().lower() for w in entry.get_text().split(",") if w.strip()]
